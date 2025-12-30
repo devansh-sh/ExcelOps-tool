@@ -1,0 +1,169 @@
+# pivot.py
+import tkinter as tk
+from tkinter import ttk, messagebox
+import pandas as pd
+
+
+class PivotFrame(ttk.Frame):
+    """
+    Simple, Excel-like Pivot Table UI.
+
+    Exposed API (used by main.py & presets):
+      - preview_pivot(df) -> DataFrame | None
+      - apply_pivot_if_requested(df) -> DataFrame
+      - get_config() / load_config(cfg)
+      - reset()
+    """
+
+    def __init__(self, parent, on_preview_callback, df: pd.DataFrame | None):
+        super().__init__(parent)
+        self.on_preview = on_preview_callback
+        self.source_df = df
+
+        self.generated = False  # pivot locked for export
+        self._build_ui()
+
+    # ---------------- UI ----------------
+    def _build_ui(self):
+        cols = [] if self.source_df is None else list(self.source_df.columns)
+
+        pad = {"padx": 6, "pady": 4}
+
+        # ---- Rows ----
+        ttk.Label(self, text="Rows").pack(anchor="w", **pad)
+        self.rows_lb = tk.Listbox(self, selectmode="multiple", height=5)
+        self.rows_lb.pack(fill="x", **pad)
+
+        # ---- Columns ----
+        ttk.Label(self, text="Columns (optional)").pack(anchor="w", **pad)
+        self.cols_lb = tk.Listbox(self, selectmode="multiple", height=4)
+        self.cols_lb.pack(fill="x", **pad)
+
+        # ---- Values ----
+        val_frame = ttk.Frame(self)
+        val_frame.pack(fill="x", **pad)
+
+        ttk.Label(val_frame, text="Value column").grid(row=0, column=0, sticky="w")
+        ttk.Label(val_frame, text="Aggregation").grid(row=0, column=1, sticky="w")
+
+        self.value_col = tk.StringVar()
+        self.agg_var = tk.StringVar(value="sum")
+
+        ttk.Combobox(
+            val_frame,
+            textvariable=self.value_col,
+            values=cols,
+            state="readonly",
+            width=30
+        ).grid(row=1, column=0, padx=(0, 8))
+
+        ttk.Combobox(
+            val_frame,
+            textvariable=self.agg_var,
+            values=["sum", "mean", "count", "min", "max"],
+            state="readonly",
+            width=12
+        ).grid(row=1, column=1)
+
+        # ---- Buttons ----
+        btns = ttk.Frame(self)
+        btns.pack(fill="x", pady=8)
+
+        ttk.Button(btns, text="🔍 Preview Pivot", command=self._preview).pack(side="left", padx=4)
+        ttk.Button(btns, text="✅ Generate Pivot Table", command=self._generate).pack(side="left", padx=4)
+        ttk.Button(btns, text="❌ Clear Pivot", command=self.reset).pack(side="right", padx=4)
+
+        # populate listboxes
+        self._refresh_columns()
+
+    # ---------------- helpers ----------------
+    def _refresh_columns(self):
+        cols = [] if self.source_df is None else list(self.source_df.columns)
+        self.rows_lb.delete(0, "end")
+        self.cols_lb.delete(0, "end")
+        for c in cols:
+            self.rows_lb.insert("end", c)
+            self.cols_lb.insert("end", c)
+
+    def _selected(self, lb):
+        return [lb.get(i) for i in lb.curselection()]
+
+    # ---------------- logic ----------------
+    def _build_pivot(self, df: pd.DataFrame) -> pd.DataFrame | None:
+        rows = self._selected(self.rows_lb)
+        cols = self._selected(self.cols_lb)
+        val = self.value_col.get()
+        agg = self.agg_var.get()
+
+        if not rows or not val:
+            return None
+
+        try:
+            pt = pd.pivot_table(
+                df,
+                index=rows,
+                columns=cols if cols else None,
+                values=val,
+                aggfunc=agg,
+                fill_value=0
+            )
+            return pt.reset_index()
+        except Exception as e:
+            messagebox.showerror("Pivot error", str(e))
+            return None
+
+    def _preview(self):
+        if self.source_df is None:
+            return
+        df = self._build_pivot(self.source_df)
+        if df is None or df.empty:
+            messagebox.showinfo("Pivot", "No pivot result with current selection.")
+            return
+        self.on_preview(df)
+
+    def _generate(self):
+        if self.source_df is None:
+            return
+        df = self._build_pivot(self.source_df)
+        if df is None:
+            return
+        self.generated = True
+        self.on_preview(df)
+
+    # ---------------- API used by main.py ----------------
+    def apply_pivot_if_requested(self, df: pd.DataFrame) -> pd.DataFrame:
+        if not self.generated:
+            return df
+        out = self._build_pivot(df)
+        return out if out is not None else df
+
+    def reset(self):
+        self.generated = False
+        self.rows_lb.selection_clear(0, "end")
+        self.cols_lb.selection_clear(0, "end")
+        self.value_col.set("")
+        self.agg_var.set("sum")
+
+    # ---------------- presets ----------------
+    def get_config(self):
+        return {
+            "rows": self._selected(self.rows_lb),
+            "columns": self._selected(self.cols_lb),
+            "value": self.value_col.get(),
+            "agg": self.agg_var.get(),
+            "generated": self.generated
+        }
+
+    def load_config(self, cfg: dict):
+        self.reset()
+        cols = [] if self.source_df is None else list(self.source_df.columns)
+
+        for i, c in enumerate(cols):
+            if c in cfg.get("rows", []):
+                self.rows_lb.selection_set(i)
+            if c in cfg.get("columns", []):
+                self.cols_lb.selection_set(i)
+
+        self.value_col.set(cfg.get("value", ""))
+        self.agg_var.set(cfg.get("agg", "sum"))
+        self.generated = cfg.get("generated", False)

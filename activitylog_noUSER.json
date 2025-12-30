@@ -1,0 +1,94 @@
+{
+  "version": 2,
+  "sheets": [
+    {
+      "name": "Sheet1",
+      "filters": {
+        "filters": [
+          [
+            "",
+            "Activity",
+            "==",
+            "Ord Conf."
+          ],
+          [
+            "OR",
+            "Activity",
+            "==",
+            "Cnxl Conf."
+          ],
+          [
+            "OR",
+            "Activity",
+            "==",
+            "Mod. Conf."
+          ]
+        ]
+      },
+      "sorts": {
+        "sorts": []
+      },
+      "columns": {
+        "order": [
+          "Exchange",
+          "Market",
+          "Symbol",
+          "B/S",
+          "Activity",
+          "Price",
+          "Volume",
+          "Intra/CNC",
+          "Trig/Stp Price",
+          "User",
+          "Order No",
+          "Trade Number",
+          "Book Type",
+          "DiscQty",
+          "Time",
+          "Error",
+          "Last Update Time",
+          "Account",
+          "Admin",
+          "Client Name",
+          "Segment",
+          "Series"
+        ],
+        "visible": {
+          "Exchange": true,
+          "Market": false,
+          "Symbol": true,
+          "B/S": true,
+          "Activity": true,
+          "Price": true,
+          "Volume": true,
+          "Intra/CNC": false,
+          "Trig/Stp Price": false,
+          "User": true,
+          "Order No": false,
+          "Trade Number": false,
+          "Book Type": false,
+          "DiscQty": false,
+          "Time": true,
+          "Error": false,
+          "Last Update Time": false,
+          "Account": false,
+          "Admin": false,
+          "Client Name": false,
+          "Segment": false,
+          "Series": false
+        },
+        "dedupe": {
+          "enabled": true,
+          "column": "Order No"
+        }
+      },
+      "pivot": {
+        "rows": [],
+        "columns": [],
+        "value": "",
+        "agg": "sum",
+        "generated": false
+      }
+    }
+  ]
+}

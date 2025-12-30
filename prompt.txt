@@ -1,0 +1,15 @@
+since we have added these many features and we still need to add more, i think the UI needs to change now. Remove the preview section. I need the preview to be in the menu.. The menu should contain File|Edit|Preset
+File: Load File,Show Previews, Export Sheet, Export Workbook.
+Edit: Add a sheet, Remove Sheet
+Preset: Load Preset, Preset Manager
+
+For the Edit section (Filter|Sort|Manage Rows/Columns|Pivot Table)
+Filter: Keep the same features that we already have
+Sort: Keep the same features that we have. remove the arrow buttons they do not work and are not required.
+Manage Rows/Columns: Merge the COlumns and Calculated columns in one. Do not change how the manage columns works now, just append the calculated columns into this
+Pivot Table: remains the same.
+
+Edit Sections should be center Aligned. With Tabbed sections for the sheets.  User should be able to add a sheet with a "+" button like we did earlier. double click on the sheet name to rename
+
+Previes should be in the menu as mentioned above. User should be able to see the previews in a separate tab. The tab should have a dropdown to select a sheet.
+Preset manager should be able to handle pivot and calculated columns as well
