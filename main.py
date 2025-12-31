@@ -218,6 +218,118 @@ class ExcelOpsApp(tk.Tk):
         messagebox.showinfo("Loaded", f"Loaded {os.path.basename(path)} with {len(self.df)} rows, {len(self.df.columns)} columns.")
 
     def _read_csv_safely(self, path: str) -> pd.DataFrame:
+        sample_lines = []
+        encodings = ("utf-8-sig", "utf-8", "latin-1")
+        for encoding in encodings:
+            try:
+                with open(path, "r", encoding=encoding, errors="replace") as handle:
+                    for _ in range(30):
+                        line = handle.readline()
+                        if not line:
+                            break
+                        if line.strip():
+                            sample_lines.append(line)
+                if sample_lines:
+                    break
+            except Exception:
+                continue
+        if not sample_lines:
+            return pd.read_csv(path)
+        sep = self._detect_csv_delimiter(sample_lines)
+        self._last_csv_sep = sep
+        for encoding in encodings:
+            try:
+                df = pd.read_csv(
+                    path,
+                    sep=sep,
+                    engine="python",
+                    encoding=encoding,
+                    index_col=False
+                )
+                self._last_csv_encoding = encoding
+                break
+            except Exception:
+                df = None
+        if df is None:
+            df = pd.read_csv(path, index_col=False)
+            self._last_csv_encoding = None
+        if len(df.columns) == 1:
+            df = self._retry_common_delimiters(path, encodings, df)
+        return df
+
+    def _retry_common_delimiters(
+        self,
+        path: str,
+        encodings: tuple[str, ...],
+        fallback_df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        best_df = fallback_df
+        best_cols = len(fallback_df.columns)
+        for delim in (",", ";", "\t", "|"):
+            for encoding in encodings:
+                try:
+                    candidate = pd.read_csv(
+                        path,
+                        sep=delim,
+                        engine="python",
+                        encoding=encoding,
+                        index_col=False
+                    )
+                except Exception:
+                    continue
+                if len(candidate.columns) > best_cols:
+                    best_df = candidate
+                    best_cols = len(candidate.columns)
+                    self._last_csv_sep = delim
+                    self._last_csv_encoding = encoding
+        return best_df
+
+    def _detect_csv_delimiter(self, sample_lines: list[str]) -> str | None:
+        import csv
+        candidates = [",", ";", "\t", "|"]
+        header_line = sample_lines[0] if sample_lines else ""
+        header_counts = {d: header_line.count(d) for d in candidates}
+        if header_counts:
+            best_header = max(header_counts, key=header_counts.get)
+            if header_counts[best_header] > 0:
+                return best_header
+        best = (None, 1, float("inf"))
+        for delim in candidates:
+            try:
+                reader = csv.reader(sample_lines, delimiter=delim)
+                counts = [len(row) for row in reader if row]
+            except Exception:
+                continue
+            if not counts:
+                continue
+            counts.sort()
+            median = counts[len(counts) // 2]
+            variance = sum((c - median) ** 2 for c in counts) / len(counts)
+            if median > best[1] or (median == best[1] and variance < best[2]):
+                best = (delim, median, variance)
+        return None if best[0] is None or best[1] <= 1 else best[0]
+
+
+    def _read_csv_with_prompt(self, path: str, df: pd.DataFrame) -> pd.DataFrame:
+        hint = str(df.columns[0])
+        delimiter = simpledialog.askstring(
+            "CSV Delimiter",
+            "Auto-detected a single-column CSV.\n"
+            "Enter the delimiter to use (examples: , ; \\t |):",
+            initialvalue="," if "," in hint else ";" if ";" in hint else "\\t" if "\t" in hint else "|",
+            parent=self
+        )
+        if delimiter is None:
+            return df
+        delimiter = delimiter.strip()
+        if delimiter == "\\t":
+            delimiter = "\t"
+        if not delimiter:
+            return df
+        try:
+            return pd.read_csv(path, sep=delimiter, engine="python")
+        except Exception:
+            return df
         try:
             return pd.read_csv(path, sep=None, engine="python")
         except Exception:
