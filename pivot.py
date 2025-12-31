@@ -15,10 +15,11 @@ class PivotFrame(ttk.Frame):
       - reset()
     """
 
-    def __init__(self, parent, on_preview_callback, df: pd.DataFrame | None):
+    def __init__(self, parent, on_preview_callback, df: pd.DataFrame | None, data_provider=None):
         super().__init__(parent)
         self.on_preview = on_preview_callback
         self.source_df = df
+        self.data_provider = data_provider
 
         self.generated = False  # pivot locked for export
         self._build_ui()
@@ -49,13 +50,14 @@ class PivotFrame(ttk.Frame):
         self.value_col = tk.StringVar()
         self.agg_var = tk.StringVar(value="sum")
 
-        ttk.Combobox(
+        self.value_cb = ttk.Combobox(
             val_frame,
             textvariable=self.value_col,
             values=cols,
             state="readonly",
             width=30
-        ).grid(row=1, column=0, padx=(0, 8))
+        )
+        self.value_cb.grid(row=1, column=0, padx=(0, 8))
 
         ttk.Combobox(
             val_frame,
@@ -77,13 +79,32 @@ class PivotFrame(ttk.Frame):
         self._refresh_columns()
 
     # ---------------- helpers ----------------
-    def _refresh_columns(self):
+    def _refresh_columns(self, keep_selection: bool = False):
         cols = [] if self.source_df is None else list(self.source_df.columns)
+        selected_rows = self._selected(self.rows_lb) if keep_selection else []
+        selected_cols = self._selected(self.cols_lb) if keep_selection else []
+        selected_val = self.value_col.get() if keep_selection else ""
         self.rows_lb.delete(0, "end")
         self.cols_lb.delete(0, "end")
         for c in cols:
             self.rows_lb.insert("end", c)
             self.cols_lb.insert("end", c)
+        if keep_selection:
+            for i, c in enumerate(cols):
+                if c in selected_rows:
+                    self.rows_lb.selection_set(i)
+                if c in selected_cols:
+                    self.cols_lb.selection_set(i)
+            if selected_val in cols:
+                self.value_col.set(selected_val)
+            else:
+                self.value_col.set("")
+        if self.value_cb is not None:
+            self.value_cb["values"] = cols
+
+    def refresh_source_df(self, df: pd.DataFrame | None):
+        self.source_df = df
+        self._refresh_columns(keep_selection=True)
 
     def _selected(self, lb):
         return [lb.get(i) for i in lb.curselection()]
@@ -113,22 +134,29 @@ class PivotFrame(ttk.Frame):
             return None
 
     def _preview(self):
-        if self.source_df is None:
+        df = self._get_preview_df()
+        if df is None:
             return
-        df = self._build_pivot(self.source_df)
+        df = self._build_pivot(df)
         if df is None or df.empty:
             messagebox.showinfo("Pivot", "No pivot result with current selection.")
             return
         self.on_preview(df)
 
     def _generate(self):
-        if self.source_df is None:
+        df = self._get_preview_df()
+        if df is None:
             return
-        df = self._build_pivot(self.source_df)
+        df = self._build_pivot(df)
         if df is None:
             return
         self.generated = True
         self.on_preview(df)
+
+    def _get_preview_df(self) -> pd.DataFrame | None:
+        if callable(self.data_provider):
+            return self.data_provider()
+        return self.source_df
 
     # ---------------- API used by main.py ----------------
     def apply_pivot_if_requested(self, df: pd.DataFrame) -> pd.DataFrame:
