@@ -21,6 +21,7 @@ class PivotFrame(ttk.Frame):
         self.source_df = df
         self.data_provider = data_provider
 
+        self.value_col = tk.StringVar()
         self.generated = False  # pivot locked for export
         self._build_ui()
 
@@ -201,6 +202,7 @@ class PivotFrame(ttk.Frame):
         self.rows_lb.selection_clear(0, "end")
         self.cols_lb.selection_clear(0, "end")
         self.values_lb.selection_clear(0, "end")
+        self.value_col.set("")
         self.agg_var.set("sum")
 
     # ---------------- presets ----------------
@@ -223,6 +225,8 @@ class PivotFrame(ttk.Frame):
             if c in cfg.get("columns", []):
                 self.cols_lb.selection_set(i)
             if c in cfg.get("values", []):
+                self.values_lb.selection_set(i)
+            if "values" not in cfg and c == cfg.get("value", ""):
                 self.values_lb.selection_set(i)
 
         self.agg_var.set(cfg.get("agg", "sum"))
