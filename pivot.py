@@ -65,6 +65,17 @@ class PivotFrame(ttk.Frame):
         self.values_lb.grid(row=1, column=0, padx=(0, 12), sticky="ew")
 
         self.agg_var = tk.StringVar(value="sum")
+        self.values_lb.grid(row=1, column=0, padx=(0, 8), sticky="ew")
+
+        self.agg_var = tk.StringVar(value="sum")
+        self.value_cb = ttk.Combobox(
+            val_frame,
+            textvariable=self.value_col,
+            values=cols,
+            state="readonly",
+            width=30
+        )
+        self.value_cb.grid(row=1, column=0, padx=(0, 8))
 
         ttk.Combobox(
             val_frame,
@@ -91,6 +102,7 @@ class PivotFrame(ttk.Frame):
         selected_rows = self._selected(self.rows_lb) if keep_selection else []
         selected_cols = self._selected(self.cols_lb) if keep_selection else []
         selected_vals = self._selected(self.values_lb) if keep_selection else []
+        selected_val = self.value_col.get() if keep_selection else ""
         self.rows_lb.delete(0, "end")
         self.cols_lb.delete(0, "end")
         self.values_lb.delete(0, "end")
@@ -106,6 +118,12 @@ class PivotFrame(ttk.Frame):
                     self.cols_lb.selection_set(i)
                 if c in selected_vals:
                     self.values_lb.selection_set(i)
+            if selected_val in cols:
+                self.value_col.set(selected_val)
+            else:
+                self.value_col.set("")
+        if self.value_cb is not None:
+            self.value_cb["values"] = cols
 
     def refresh_source_df(self, df: pd.DataFrame | None):
         self.source_df = df
