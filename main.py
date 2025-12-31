@@ -185,7 +185,7 @@ class ExcelOpsApp(tk.Tk):
             return
         try:
             if path.lower().endswith(".csv"):
-                self.df = pd.read_csv(path)
+                self.df = self._read_csv_safely(path)
             else:
                 self.df = pd.read_excel(path)
             self.df = self.df.reset_index(drop=True)
@@ -216,6 +216,12 @@ class ExcelOpsApp(tk.Tk):
         self._ensure_plus_tab()
         self._refresh_preview_selector()
         messagebox.showinfo("Loaded", f"Loaded {os.path.basename(path)} with {len(self.df)} rows, {len(self.df.columns)} columns.")
+
+    def _read_csv_safely(self, path: str) -> pd.DataFrame:
+        try:
+            return pd.read_csv(path, sep=None, engine="python")
+        except Exception:
+            return pd.read_csv(path)
 
     # ---------------- Sheets ----------------
     def _next_sheet_name(self):
