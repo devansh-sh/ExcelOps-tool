@@ -218,59 +218,10 @@ class ExcelOpsApp(tk.Tk):
         messagebox.showinfo("Loaded", f"Loaded {os.path.basename(path)} with {len(self.df)} rows, {len(self.df.columns)} columns.")
 
     def _read_csv_safely(self, path: str) -> pd.DataFrame:
-        sample_lines = []
-        encodings = ("utf-8-sig", "utf-8", "latin-1")
-        for encoding in encodings:
-            try:
-                with open(path, "r", encoding=encoding, errors="replace") as handle:
-                    for _ in range(30):
-                        line = handle.readline()
-                        if not line:
-                            break
-                        if line.strip():
-                            sample_lines.append(line)
-                if sample_lines:
-                    break
-            except Exception:
-                continue
-        if not sample_lines:
+        try:
+            return pd.read_csv(path, sep=None, engine="python")
+        except Exception:
             return pd.read_csv(path)
-        sep = self._detect_csv_delimiter(sample_lines)
-        for encoding in encodings:
-            try:
-                df = pd.read_csv(path, sep=sep, engine="python", encoding=encoding)
-                break
-            except Exception:
-                df = None
-        if df is None:
-            df = pd.read_csv(path)
-        if len(df.columns) == 1 and sep not in (None, ","):
-            for encoding in encodings:
-                try:
-                    df = pd.read_csv(path, sep=",", engine="python", encoding=encoding)
-                    break
-                except Exception:
-                    continue
-        return df
-
-    def _detect_csv_delimiter(self, sample_lines: list[str]) -> str | None:
-        import csv
-        candidates = [",", ";", "\t", "|"]
-        best = (None, 1, float("inf"))
-        for delim in candidates:
-            try:
-                reader = csv.reader(sample_lines, delimiter=delim)
-                counts = [len(row) for row in reader if row]
-            except Exception:
-                continue
-            if not counts:
-                continue
-            counts.sort()
-            median = counts[len(counts) // 2]
-            variance = sum((c - median) ** 2 for c in counts) / len(counts)
-            if median > best[1] or (median == best[1] and variance < best[2]):
-                best = (delim, median, variance)
-        return None if best[0] is None or best[1] <= 1 else best[0]
 
     # ---------------- Sheets ----------------
     def _next_sheet_name(self):
