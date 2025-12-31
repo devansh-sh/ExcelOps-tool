@@ -6,7 +6,6 @@ import os
 import sys
 
 from vlookup_helper import perform_vlookup
-from vlookup_frame import VlookupFrame
 
 def is_batch_mode() -> bool:
     """
@@ -340,6 +339,10 @@ class ExcelOpsApp(tk.Tk):
             return pd.read_csv(path, sep=delimiter, engine="python")
         except Exception:
             return df
+        try:
+            return pd.read_csv(path, sep=None, engine="python")
+        except Exception:
+            return pd.read_csv(path)
 
     # ---------------- Sheets ----------------
     def _next_sheet_name(self):
@@ -377,7 +380,6 @@ class ExcelOpsApp(tk.Tk):
         sorts_frame = SortsFrame(inner_nb, self.on_sheet_change, self.df)
         columns_frame = ColumnsManagerFrame(inner_nb, self.on_sheet_change, self.df)  # merged manager
         pivot_frame = PivotFrame(inner_nb, self.on_pivot_preview, self.df, data_provider=lambda: self._generate_base_df(sheet))
-        vlookup_frame = VlookupFrame(inner_nb, self.apply_vlookup, lambda: self.apply_vlookup(multi_key=True))
 
         inner_nb.add(filters_frame, text="Filter")
         inner_nb.add(sorts_frame, text="Sort")
