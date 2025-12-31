@@ -33,6 +33,8 @@ class ExcelOpsApp(tk.Tk):
         self.df: pd.DataFrame | None = None
         self.preview_row_index_map: dict[str, int] = {}
         self.preview_deletable = False
+        self._last_csv_sep: str | None = None
+        self._last_csv_encoding: str | None = None
         # sheets: list of dicts {name, tab, inner_nb, filters, sorts, columns, pivot}
         self.sheets = []
         self.plus_tab = None  # identifier for '+' tab

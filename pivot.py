@@ -30,6 +30,17 @@ class PivotFrame(ttk.Frame):
 
         pad = {"padx": 6, "pady": 4}
 
+        ttk.Label(
+            self,
+            text=(
+                "How to use: 1) Pick Rows. 2) (Optional) Pick Columns. "
+                "3) Pick one or more Values. 4) Choose Aggregation. "
+                "5) Preview or Generate."
+            ),
+            wraplength=760,
+            justify="left"
+        ).pack(anchor="w", **pad)
+
         # ---- Rows ----
         ttk.Label(self, text="Rows").pack(anchor="w", **pad)
         self.rows_lb = tk.Listbox(self, selectmode="multiple", height=5)
@@ -44,12 +55,13 @@ class PivotFrame(ttk.Frame):
         val_frame = ttk.Frame(self)
         val_frame.pack(fill="x", **pad)
 
-        ttk.Label(val_frame, text="Value column").grid(row=0, column=0, sticky="w")
+        ttk.Label(val_frame, text="Values").grid(row=0, column=0, sticky="w")
         ttk.Label(val_frame, text="Aggregation").grid(row=0, column=1, sticky="w")
 
-        self.value_col = tk.StringVar()
-        self.agg_var = tk.StringVar(value="sum")
+        self.values_lb = tk.Listbox(val_frame, selectmode="multiple", height=5, exportselection=False)
+        self.values_lb.grid(row=1, column=0, padx=(0, 8), sticky="ew")
 
+        self.agg_var = tk.StringVar(value="sum")
         self.value_cb = ttk.Combobox(
             val_frame,
             textvariable=self.value_col,
@@ -83,18 +95,23 @@ class PivotFrame(ttk.Frame):
         cols = [] if self.source_df is None else list(self.source_df.columns)
         selected_rows = self._selected(self.rows_lb) if keep_selection else []
         selected_cols = self._selected(self.cols_lb) if keep_selection else []
+        selected_vals = self._selected(self.values_lb) if keep_selection else []
         selected_val = self.value_col.get() if keep_selection else ""
         self.rows_lb.delete(0, "end")
         self.cols_lb.delete(0, "end")
+        self.values_lb.delete(0, "end")
         for c in cols:
             self.rows_lb.insert("end", c)
             self.cols_lb.insert("end", c)
+            self.values_lb.insert("end", c)
         if keep_selection:
             for i, c in enumerate(cols):
                 if c in selected_rows:
                     self.rows_lb.selection_set(i)
                 if c in selected_cols:
                     self.cols_lb.selection_set(i)
+                if c in selected_vals:
+                    self.values_lb.selection_set(i)
             if selected_val in cols:
                 self.value_col.set(selected_val)
             else:
@@ -113,21 +130,35 @@ class PivotFrame(ttk.Frame):
     def _build_pivot(self, df: pd.DataFrame) -> pd.DataFrame | None:
         rows = self._selected(self.rows_lb)
         cols = self._selected(self.cols_lb)
-        val = self.value_col.get()
+        vals = self._selected(self.values_lb)
         agg = self.agg_var.get()
 
-        if not rows or not val:
+        if not rows:
             return None
 
         try:
-            pt = pd.pivot_table(
-                df,
-                index=rows,
-                columns=cols if cols else None,
-                values=val,
-                aggfunc=agg,
-                fill_value=0
-            )
+            if vals:
+                pt = pd.pivot_table(
+                    df,
+                    index=rows,
+                    columns=cols if cols else None,
+                    values=vals,
+                    aggfunc=agg,
+                    fill_value=0
+                )
+            else:
+                pt = pd.pivot_table(
+                    df,
+                    index=rows,
+                    columns=cols if cols else None,
+                    aggfunc="size",
+                    fill_value=0
+                )
+                pt = pt.rename("Count")
+            if isinstance(pt.columns, pd.MultiIndex):
+                pt.columns = [" | ".join([str(c) for c in col if c != ""]) for col in pt.columns.values]
+            elif isinstance(pt.columns, pd.Index):
+                pt.columns = [str(c) for c in pt.columns]
             return pt.reset_index()
         except Exception as e:
             messagebox.showerror("Pivot error", str(e))
@@ -169,7 +200,7 @@ class PivotFrame(ttk.Frame):
         self.generated = False
         self.rows_lb.selection_clear(0, "end")
         self.cols_lb.selection_clear(0, "end")
-        self.value_col.set("")
+        self.values_lb.selection_clear(0, "end")
         self.agg_var.set("sum")
 
     # ---------------- presets ----------------
@@ -177,7 +208,7 @@ class PivotFrame(ttk.Frame):
         return {
             "rows": self._selected(self.rows_lb),
             "columns": self._selected(self.cols_lb),
-            "value": self.value_col.get(),
+            "values": self._selected(self.values_lb),
             "agg": self.agg_var.get(),
             "generated": self.generated
         }
@@ -191,7 +222,8 @@ class PivotFrame(ttk.Frame):
                 self.rows_lb.selection_set(i)
             if c in cfg.get("columns", []):
                 self.cols_lb.selection_set(i)
+            if c in cfg.get("values", []):
+                self.values_lb.selection_set(i)
 
-        self.value_col.set(cfg.get("value", ""))
         self.agg_var.set(cfg.get("agg", "sum"))
         self.generated = cfg.get("generated", False)
