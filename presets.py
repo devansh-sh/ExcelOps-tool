@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import pandas as pd
 
-PRESET_DIR = os.path.join(os.getcwd(), "presets")
+PRESET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "presets")
 
 
 class PresetManager:
@@ -123,6 +123,14 @@ class PresetManager:
             # ensure df is wired so dropdowns populate
             try:
                 s["filters"].refresh_source_df(app.df)
+            except Exception:
+                pass
+            try:
+                s["columns"].refresh_source_df(app.df)
+            except Exception:
+                pass
+            try:
+                s["pivot"].refresh_source_df(app.df)
             except Exception:
                 pass
 
