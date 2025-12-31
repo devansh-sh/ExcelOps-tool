@@ -385,6 +385,7 @@ class ExcelOpsApp(tk.Tk):
         inner_nb.add(sorts_frame, text="Sort")
         inner_nb.add(columns_frame, text="Columns")
         inner_nb.add(pivot_frame, text="Pivot")
+        inner_nb.add(vlookup_frame, text="VLOOKUP")
 
         sheet = {
             "name": name,
@@ -394,6 +395,7 @@ class ExcelOpsApp(tk.Tk):
             "sorts": sorts_frame,
             "columns": columns_frame,
             "pivot": pivot_frame,
+            "vlookup": vlookup_frame,
         }
         self.sheets.append(sheet)
 
