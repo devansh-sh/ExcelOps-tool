@@ -6,6 +6,7 @@ import os
 import sys
 
 from vlookup_helper import perform_vlookup
+from vlookup_frame import VlookupFrame
 
 def is_batch_mode() -> bool:
     """
@@ -380,6 +381,7 @@ class ExcelOpsApp(tk.Tk):
         sorts_frame = SortsFrame(inner_nb, self.on_sheet_change, self.df)
         columns_frame = ColumnsManagerFrame(inner_nb, self.on_sheet_change, self.df)  # merged manager
         pivot_frame = PivotFrame(inner_nb, self.on_pivot_preview, self.df, data_provider=lambda: self._generate_base_df(sheet))
+        vlookup_frame = self._build_vlookup_frame(inner_nb)
 
         inner_nb.add(filters_frame, text="Filter")
         inner_nb.add(sorts_frame, text="Sort")
@@ -495,6 +497,9 @@ class ExcelOpsApp(tk.Tk):
         except Exception:
             pass
         return None
+
+    def _build_vlookup_frame(self, parent):
+        return VlookupFrame(parent, self.apply_vlookup, lambda: self.apply_vlookup(multi_key=True))
 
     def apply_vlookup(self, multi_key: bool = False):
         if self.df is None:
