@@ -5,6 +5,8 @@ import pandas as pd
 import os
 import sys
 
+from vlookup_helper import perform_vlookup
+
 def is_batch_mode() -> bool:
     """
     Determines whether ExcelOps is launched in batch mode.
@@ -91,6 +93,11 @@ class ExcelOpsApp(tk.Tk):
         presets_m.add_command(label="Save Preset…", command=lambda: PresetManager.save(self))
         presets_m.add_command(label="Load Preset…", command=lambda: PresetManager.load(self))
         presets_m.add_command(label="Manage Presets…", command=lambda: PresetManager.manage(self))
+
+        tools_m = tk.Menu(m, tearoff=False)
+        m.add_cascade(label="Tools", menu=tools_m)
+        tools_m.add_command(label="VLOOKUP…", command=self.apply_vlookup)
+        tools_m.add_command(label="VLOOKUP (Multi-Key)…", command=lambda: self.apply_vlookup(multi_key=True))
 
         edit_m = tk.Menu(m, tearoff=False)
         m.add_cascade(label="Edit", menu=edit_m)
@@ -486,6 +493,22 @@ class ExcelOpsApp(tk.Tk):
         except Exception:
             pass
         return None
+
+    def apply_vlookup(self, multi_key: bool = False):
+        if self.df is None:
+            messagebox.showwarning("No data", "Load a file first.")
+            return
+        idx = self._active_sheet_index()
+        if idx is None:
+            messagebox.showwarning("No sheet", "Select a sheet to run VLOOKUP.")
+            return
+        sheet = self.sheets[idx]
+        merged = perform_vlookup(self, sheet, multi_key=multi_key)
+        if merged is None:
+            return
+        self.df = merged.reset_index(drop=True)
+        self._refresh_filters_after_data_change()
+        self.update_preview()
 
     # ---------------- Preview tab handling ----------------
     def open_preview_tab(self):

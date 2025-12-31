@@ -82,6 +82,17 @@ class PivotFrame(ttk.Frame):
         self.agg_var = tk.StringVar(value="sum")
 
         ttk.Label(val_frame, text="Values").grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            val_frame,
+            text="Aggregation (applies to selected values)"
+        ).grid(row=0, column=1, sticky="w")
+
+        self.values_lb = tk.Listbox(val_frame, selectmode="multiple", height=6, exportselection=False)
+        self.values_lb.grid(row=1, column=0, padx=(0, 16), sticky="nsew")
+
+        self.agg_var = tk.StringVar(value="sum")
+
+        ttk.Label(val_frame, text="Values").grid(row=0, column=0, sticky="w")
         ttk.Label(val_frame, text="Aggregation").grid(row=0, column=1, sticky="w")
 
         self.values_lb = tk.Listbox(val_frame, selectmode="multiple", height=5, exportselection=False)
