@@ -218,32 +218,10 @@ class ExcelOpsApp(tk.Tk):
         messagebox.showinfo("Loaded", f"Loaded {os.path.basename(path)} with {len(self.df)} rows, {len(self.df.columns)} columns.")
 
     def _read_csv_safely(self, path: str) -> pd.DataFrame:
-        sample = ""
-        for encoding in ("utf-8-sig", "utf-8", "latin-1"):
-            try:
-                with open(path, "r", encoding=encoding, errors="replace") as handle:
-                    sample = handle.read(8192)
-                break
-            except Exception:
-                continue
-        if not sample:
+        try:
+            return pd.read_csv(path, sep=None, engine="python")
+        except Exception:
             return pd.read_csv(path)
-        try:
-            import csv
-            dialect = csv.Sniffer().sniff(sample, delimiters=[",", ";", "\t", "|"])
-            sep = dialect.delimiter
-        except Exception:
-            sep = None
-        try:
-            df = pd.read_csv(path, sep=sep, engine="python")
-        except Exception:
-            df = pd.read_csv(path)
-        if len(df.columns) == 1 and sep not in (None, ","):
-            try:
-                df = pd.read_csv(path, sep=",", engine="python")
-            except Exception:
-                pass
-        return df
 
     # ---------------- Sheets ----------------
     def _next_sheet_name(self):
