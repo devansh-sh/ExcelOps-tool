@@ -339,6 +339,10 @@ class ExcelOpsApp(tk.Tk):
             return pd.read_csv(path, sep=delimiter, engine="python")
         except Exception:
             return df
+        try:
+            return pd.read_csv(path, sep=None, engine="python")
+        except Exception:
+            return pd.read_csv(path)
 
     # ---------------- Sheets ----------------
     def _next_sheet_name(self):
