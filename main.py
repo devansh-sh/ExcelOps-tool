@@ -31,6 +31,8 @@ class ExcelOpsApp(tk.Tk):
         self.geometry("1280x820")
 
         self.df: pd.DataFrame | None = None
+        self.preview_row_index_map: dict[str, int] = {}
+        self.preview_deletable = False
         # sheets: list of dicts {name, tab, inner_nb, filters, sorts, columns, pivot}
         self.sheets = []
         self.plus_tab = None  # identifier for '+' tab
@@ -47,6 +49,8 @@ class ExcelOpsApp(tk.Tk):
         self.preview_selector = ttk.Combobox(top, state="readonly", width=40, values=[])
         self.preview_selector.pack(side="left", padx=6)
         self.preview_selector.bind("<<ComboboxSelected>>", lambda e: self.update_preview())
+
+        ttk.Button(top, text="Delete Selected Rows", command=self.delete_selected_rows).pack(side="left", padx=6)
 
         self.show_all_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(top, text="Show full", variable=self.show_all_var, command=self.update_preview).pack(side="right")
@@ -90,6 +94,8 @@ class ExcelOpsApp(tk.Tk):
         m.add_cascade(label="Edit", menu=edit_m)
         edit_m.add_command(label="Add Sheet", command=lambda: self.add_sheet(self._next_sheet_name()))
         edit_m.add_command(label="Remove Sheet", command=self.close_sheet)
+        edit_m.add_separator()
+        edit_m.add_command(label="Delete Selected Rows", command=self.delete_selected_rows)
 
     def _make_tab_menu(self):
         self.tab_menu = tk.Menu(self, tearoff=False)
@@ -167,7 +173,7 @@ class ExcelOpsApp(tk.Tk):
 
     def _create_preview_tree_holder(self):
         # Create a reusable treeview for the preview tab (created hidden initially)
-        self.preview_tree = ttk.Treeview(self, show="headings")
+        self.preview_tree = ttk.Treeview(self, show="headings", selectmode="extended")
         self.preview_vs = ttk.Scrollbar(self, orient="vertical", command=self.preview_tree.yview)
         self.preview_hs = ttk.Scrollbar(self, orient="horizontal", command=self.preview_tree.xview)
         self.preview_tree.configure(yscrollcommand=self.preview_vs.set, xscrollcommand=self.preview_hs.set)
@@ -182,6 +188,7 @@ class ExcelOpsApp(tk.Tk):
                 self.df = pd.read_csv(path)
             else:
                 self.df = pd.read_excel(path)
+            self.df = self.df.reset_index(drop=True)
         except Exception as e:
             messagebox.showerror("Load error", str(e))
             return
@@ -203,6 +210,8 @@ class ExcelOpsApp(tk.Tk):
                     s["filters"].refresh_source_df(self.df)
             except Exception:
                 pass
+
+        self._refresh_filters_after_data_change()
 
         self._ensure_plus_tab()
         self._refresh_preview_selector()
@@ -243,7 +252,7 @@ class ExcelOpsApp(tk.Tk):
 
         sorts_frame = SortsFrame(inner_nb, self.on_sheet_change, self.df)
         columns_frame = ColumnsManagerFrame(inner_nb, self.on_sheet_change, self.df)  # merged manager
-        pivot_frame = PivotFrame(inner_nb, self.on_pivot_preview, self.df)
+        pivot_frame = PivotFrame(inner_nb, self.on_pivot_preview, self.df, data_provider=lambda: self._generate_base_df(sheet))
 
         inner_nb.add(filters_frame, text="Filter")
         inner_nb.add(sorts_frame, text="Sort")
@@ -376,7 +385,7 @@ class ExcelOpsApp(tk.Tk):
         # attach the reusable preview_tree and scrollbars into this frame
         tree_holder = ttk.Frame(pf)
         tree_holder.pack(fill="both", expand=True)
-        self.preview_tree = ttk.Treeview(tree_holder, show="headings")
+        self.preview_tree = ttk.Treeview(tree_holder, show="headings", selectmode="extended")
         self.preview_tree.pack(side="left", fill="both", expand=True)
         vs = ttk.Scrollbar(tree_holder, orient="vertical", command=self.preview_tree.yview)
         hs = ttk.Scrollbar(tree_holder, orient="horizontal", command=self.preview_tree.xview)
@@ -437,8 +446,10 @@ class ExcelOpsApp(tk.Tk):
             tree_widget.delete(*tree_widget.get_children())
         except Exception:
             pass
+        self.preview_row_index_map = {}
         if df is None or df.empty:
             tree_widget["columns"] = ()
+            self.preview_deletable = False
             return
         cols = list(df.columns)
         tree_widget["columns"] = cols
@@ -447,9 +458,14 @@ class ExcelOpsApp(tk.Tk):
             tree_widget.heading(c, text=str(c))
             tree_widget.column(c, width=max(120, min(360, 10 * len(str(c)))), anchor="w")
         n = len(df) if self.show_all_var.get() else min(1000, len(df))
-        for _, row in df.head(n).iterrows():
+        for i, (_, row) in enumerate(df.head(n).iterrows()):
             vals = [("" if pd.isna(row[c]) else row[c]) for c in cols]
-            tree_widget.insert("", "end", values=vals)
+            iid = str(row.name)
+            if iid in self.preview_row_index_map:
+                iid = f"{iid}-{i}"
+            self.preview_row_index_map[iid] = row.name
+            tree_widget.insert("", "end", iid=iid, values=vals)
+        self.preview_deletable = True
 
     # ---------------- Core df generation ----------------
     def _generate_filtered_df(self, sheet) -> pd.DataFrame:
@@ -473,6 +489,22 @@ class ExcelOpsApp(tk.Tk):
             pass
         return df
 
+    def _generate_base_df(self, sheet) -> pd.DataFrame:
+        df = self.df.copy()
+        try:
+            df = sheet["filters"].apply_filters(df)
+        except Exception:
+            pass
+        try:
+            df = sheet["sorts"].apply_sorts(df)
+        except Exception:
+            pass
+        try:
+            df = sheet["columns"].apply_columns(df)
+        except Exception:
+            pass
+        return df
+
     def on_sheet_change(self):
         # called by inner frames to request live preview update
         self.update_preview()
@@ -485,6 +517,7 @@ class ExcelOpsApp(tk.Tk):
         # ensure preview tab exists and select it
         self.open_preview_tab()
         self._render_df_into_tree(pivot_df, self.preview_tree)
+        self.preview_deletable = False
 
     # ---------------- Export ----------------
     def export_current_sheet(self):
@@ -529,6 +562,56 @@ class ExcelOpsApp(tk.Tk):
             messagebox.showinfo("Exported", f"Workbook saved to {dest}")
         except Exception as e:
             messagebox.showerror("Export error", str(e))
+
+    # ---------------- Row deletion ----------------
+    def delete_selected_rows(self):
+        if self.df is None:
+            messagebox.showwarning("No data", "Load a file first.")
+            return
+        if not (self.preview_tab_id and self.preview_tab_id in self.nb.tabs()):
+            messagebox.showwarning("Preview not open", "Open the Preview tab to select rows for deletion.")
+            return
+        if not self.preview_deletable:
+            messagebox.showinfo("Unavailable", "Row deletion is only available in data previews.")
+            return
+        selected = self.preview_tree.selection()
+        if not selected:
+            messagebox.showinfo("No selection", "Select one or more rows in the preview table.")
+            return
+        indices = [self.preview_row_index_map.get(iid) for iid in selected]
+        indices = [idx for idx in indices if idx is not None]
+        if not indices:
+            messagebox.showwarning("No rows", "Selected rows could not be resolved.")
+            return
+        if not messagebox.askyesno("Delete Rows", f"Delete {len(indices)} selected row(s) from the dataset?"):
+            return
+        self.df = self.df.drop(index=indices, errors="ignore")
+        self.df = self.df.reset_index(drop=True)
+        self._refresh_filters_after_data_change()
+        self.update_preview()
+
+    def _refresh_filters_after_data_change(self):
+        for s in self.sheets:
+            try:
+                if hasattr(s["filters"], "refresh_source_df"):
+                    s["filters"].refresh_source_df(self.df)
+            except Exception:
+                pass
+            try:
+                if hasattr(s["sorts"], "refresh_columns"):
+                    s["sorts"].refresh_columns(self.df)
+            except Exception:
+                pass
+            try:
+                if hasattr(s["columns"], "refresh_source_df"):
+                    s["columns"].refresh_source_df(self.df)
+            except Exception:
+                pass
+            try:
+                if hasattr(s["pivot"], "refresh_source_df"):
+                    s["pivot"].refresh_source_df(self.df)
+            except Exception:
+                pass
 
 def run_batch_mode():
     """
