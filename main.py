@@ -450,6 +450,8 @@ class ExcelOpsApp(tk.Tk):
             dst["sorts"].load_config(src["sorts"].get_config())
             dst["columns"].load_config(src["columns"].get_config())
             dst["pivot"].load_config(src["pivot"].get_config())
+            if "vlookup" in src and "vlookup" in dst:
+                dst["vlookup"].load_config(src["vlookup"].get_config())
         except Exception:
             pass
         self.update_preview()

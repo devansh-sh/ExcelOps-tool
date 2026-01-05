@@ -71,6 +71,7 @@ class PresetManager:
                 "sorts": s["sorts"].get_config(),
                 "columns": s["columns"].get_config(),
                 "pivot": s["pivot"].get_config(),
+                "vlookup": s["vlookup"].get_config() if "vlookup" in s else {},
             }
             data["sheets"].append(sheet_cfg)
 
@@ -119,6 +120,8 @@ class PresetManager:
             s["sorts"].load_config(sheet_cfg.get("sorts", {}))
             s["columns"].load_config(sheet_cfg.get("columns", {}))
             s["pivot"].load_config(sheet_cfg.get("pivot", {}))
+            if "vlookup" in s:
+                s["vlookup"].load_config(sheet_cfg.get("vlookup", {}))
 
             # ensure df is wired so dropdowns populate
             try:
