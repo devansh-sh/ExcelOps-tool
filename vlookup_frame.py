@@ -14,8 +14,12 @@ class VlookupFrame(ttk.Frame):
         ttk.Label(
             self,
             text=(
-                "VLOOKUP: merge a lookup file into the current sheet.\n"
-                "Use single-key for one matching column or multi-key for multiple keys."
+                "How to use VLOOKUP:\n"
+                "1) Choose your main sheet and apply filters if needed.\n"
+                "2) Click 'Run VLOOKUP' (single key) or 'Run Multi-Key VLOOKUP'.\n"
+                "3) Select the lookup file when prompted.\n"
+                "4) Pick key column(s) and the lookup value columns.\n"
+                "5) Preview updates automatically in the Preview tab."
             ),
             wraplength=760,
             justify="left"
