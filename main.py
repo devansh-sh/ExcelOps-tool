@@ -340,6 +340,10 @@ class ExcelOpsApp(tk.Tk):
             return pd.read_csv(path, sep=delimiter, engine="python")
         except Exception:
             return df
+        try:
+            return pd.read_csv(path, sep=None, engine="python")
+        except Exception:
+            return pd.read_csv(path)
 
     # ---------------- Sheets ----------------
     def _next_sheet_name(self):
@@ -508,10 +512,7 @@ class ExcelOpsApp(tk.Tk):
             messagebox.showwarning("No sheet", "Select a sheet to run VLOOKUP.")
             return
         sheet = self.sheets[idx]
-        preset_cfg = {}
-        if "vlookup" in sheet and hasattr(sheet["vlookup"], "get_config"):
-            preset_cfg = sheet["vlookup"].get_config()
-        merged = perform_vlookup(self, sheet, multi_key=multi_key, preset=preset_cfg)
+        merged = perform_vlookup(self, sheet, multi_key=multi_key)
         if merged is None:
             return
         self.df = merged.reset_index(drop=True)
