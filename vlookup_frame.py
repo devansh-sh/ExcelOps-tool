@@ -3,10 +3,11 @@ from tkinter import ttk
 
 
 class VlookupFrame(ttk.Frame):
-    def __init__(self, parent, on_vlookup, on_vlookup_multi):
+    def __init__(self, parent, on_vlookup, on_vlookup_multi, columns=None):
         super().__init__(parent)
         self.on_vlookup = on_vlookup
         self.on_vlookup_multi = on_vlookup_multi
+        self.columns = columns or []
         self.mode_var = tk.StringVar(value="single")
         self.main_keys_var = tk.StringVar()
         self.lookup_keys_var = tk.StringVar()
@@ -30,27 +31,43 @@ class VlookupFrame(ttk.Frame):
             justify="left"
         ).pack(anchor="w", **pad)
 
-        form = ttk.Frame(self)
+        form = ttk.LabelFrame(self, text="VLOOKUP Settings")
         form.pack(fill="x", **pad)
+        form.columnconfigure(1, weight=1)
 
-        ttk.Label(form, text="Mode").grid(row=0, column=0, sticky="w")
-        ttk.Radiobutton(form, text="Single Key", variable=self.mode_var, value="single").grid(row=0, column=1, sticky="w")
-        ttk.Radiobutton(form, text="Multi-Key", variable=self.mode_var, value="multi").grid(row=0, column=2, sticky="w")
+        ttk.Label(form, text="Mode").grid(row=0, column=0, sticky="w", padx=6, pady=4)
+        mode_box = ttk.Combobox(
+            form,
+            textvariable=self.mode_var,
+            values=["single", "multi"],
+            state="readonly",
+            width=16
+        )
+        mode_box.grid(row=0, column=1, sticky="w", padx=6, pady=4)
 
-        ttk.Label(form, text="Main key(s)").grid(row=1, column=0, sticky="w")
-        ttk.Entry(form, textvariable=self.main_keys_var, width=50).grid(row=1, column=1, columnspan=2, sticky="ew", pady=2)
+        ttk.Label(form, text="Main key(s)").grid(row=1, column=0, sticky="w", padx=6, pady=4)
+        self.main_keys_cb = ttk.Combobox(
+            form,
+            textvariable=self.main_keys_var,
+            values=self.columns,
+            width=48
+        )
+        self.main_keys_cb.grid(row=1, column=1, sticky="ew", padx=6, pady=4)
+        ttk.Label(form, text="(comma-separated for multi)").grid(row=1, column=2, sticky="w", padx=6, pady=4)
 
-        ttk.Label(form, text="Lookup key(s)").grid(row=2, column=0, sticky="w")
-        ttk.Entry(form, textvariable=self.lookup_keys_var, width=50).grid(row=2, column=1, columnspan=2, sticky="ew", pady=2)
+        ttk.Label(form, text="Lookup key(s)").grid(row=2, column=0, sticky="w", padx=6, pady=4)
+        ttk.Entry(form, textvariable=self.lookup_keys_var, width=50).grid(row=2, column=1, sticky="ew", padx=6, pady=4)
+        ttk.Label(form, text="(comma-separated)").grid(row=2, column=2, sticky="w", padx=6, pady=4)
 
-        ttk.Label(form, text="Lookup value columns").grid(row=3, column=0, sticky="w")
-        ttk.Entry(form, textvariable=self.values_var, width=50).grid(row=3, column=1, columnspan=2, sticky="ew", pady=2)
+        ttk.Label(form, text="Lookup value columns").grid(row=3, column=0, sticky="w", padx=6, pady=4)
+        ttk.Entry(form, textvariable=self.values_var, width=50).grid(row=3, column=1, sticky="ew", padx=6, pady=4)
+        ttk.Label(form, text="(comma-separated)").grid(row=3, column=2, sticky="w", padx=6, pady=4)
 
-        ttk.Label(form, text="Prefix (optional)").grid(row=4, column=0, sticky="w")
-        ttk.Entry(form, textvariable=self.prefix_var, width=50).grid(row=4, column=1, columnspan=2, sticky="ew", pady=2)
+        ttk.Label(form, text="Prefix (optional)").grid(row=4, column=0, sticky="w", padx=6, pady=4)
+        ttk.Entry(form, textvariable=self.prefix_var, width=50).grid(row=4, column=1, sticky="ew", padx=6, pady=4)
 
-        ttk.Label(form, text="Default fill (optional)").grid(row=5, column=0, sticky="w")
-        ttk.Entry(form, textvariable=self.default_fill_var, width=50).grid(row=5, column=1, columnspan=2, sticky="ew", pady=2)
+        ttk.Label(form, text="Default fill (optional)").grid(row=5, column=0, sticky="w", padx=6, pady=4)
+        ttk.Entry(form, textvariable=self.default_fill_var, width=50).grid(row=5, column=1, sticky="ew", padx=6, pady=4)
 
         actions = ttk.Frame(self)
         actions.pack(fill="x", **pad)
@@ -75,3 +92,8 @@ class VlookupFrame(ttk.Frame):
         self.values_var.set(cfg.get("values", ""))
         self.prefix_var.set(cfg.get("prefix", ""))
         self.default_fill_var.set(cfg.get("default_fill", ""))
+
+    def set_columns(self, columns):
+        self.columns = columns or []
+        if hasattr(self, "main_keys_cb"):
+            self.main_keys_cb["values"] = self.columns

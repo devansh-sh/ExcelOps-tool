@@ -378,6 +378,7 @@ class ExcelOpsApp(tk.Tk):
         columns_frame = ColumnsManagerFrame(inner_nb, self.on_sheet_change, self.df)  # merged manager
         pivot_frame = PivotFrame(inner_nb, self.on_pivot_preview, self.df, data_provider=lambda: self._generate_base_df(sheet))
         vlookup_frame = self._build_vlookup_frame(inner_nb)
+        vlookup_frame.set_columns(list(self.df.columns))
 
         inner_nb.add(filters_frame, text="Filter")
         inner_nb.add(sorts_frame, text="Sort")
@@ -761,6 +762,11 @@ class ExcelOpsApp(tk.Tk):
             try:
                 if hasattr(s["pivot"], "refresh_source_df"):
                     s["pivot"].refresh_source_df(self.df)
+            except Exception:
+                pass
+            try:
+                if "vlookup" in s and hasattr(s["vlookup"], "set_columns"):
+                    s["vlookup"].set_columns(list(self.df.columns))
             except Exception:
                 pass
 
