@@ -232,7 +232,16 @@ class FiltersFrame(ttk.Frame):
     def load_config(self, cfg: Dict[str, Any]):
         self.reset(silent=True)
         for f in cfg.get("filters", []):
-            self.add_row(f)
+            if isinstance(f, dict):
+                self.add_row(f)
+            elif isinstance(f, (list, tuple)) and len(f) >= 4:
+                self.add_row({
+                    "join": f[0],
+                    "col": f[1],
+                    "op": f[2],
+                    "val": f[3],
+                    "cmp": f[4] if len(f) > 4 else "",
+                })
         self._changed()
 
     # ---------------- Misc ----------------
