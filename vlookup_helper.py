@@ -28,7 +28,7 @@ def _ask_choice(prompt: str, options: list[str], parent=None) -> str | None:
     return val
 
 
-def perform_vlookup(app, sheet, multi_key: bool = False, preset: dict | None = None):
+def perform_vlookup(app, sheet, preset: dict | None = None):
     """
     Perform left-join (VLOOKUP-like) merging the current sheet's filtered DataFrame
     with a user-selected lookup file.
@@ -80,9 +80,7 @@ def perform_vlookup(app, sheet, multi_key: bool = False, preset: dict | None = N
     lookup_cols = list(lookup_df.columns.astype(str))
 
     preset = preset or {}
-    mode = preset.get("mode", "multi" if multi_key else "single")
-    if mode == "multi":
-        multi_key = True
+    multi_key = False
 
     if preset.get("main_keys") and preset.get("lookup_keys"):
         keys_main = [c.strip() for c in preset.get("main_keys", "").split(",") if c.strip()]
@@ -92,40 +90,15 @@ def perform_vlookup(app, sheet, multi_key: bool = False, preset: dict | None = N
         keys_lookup = []
 
     if not keys_main or not keys_lookup:
-        # Ask for keys (support multi-key if user chooses)
-        if not multi_key:
-            key_main = _ask_choice("Enter key column in main sheet (exact name):", main_cols, parent=app)
-            if not key_main:
-                return None
-            key_lookup = _ask_choice("Enter key column in lookup file (exact name):", lookup_cols, parent=app)
-            if not key_lookup:
-                return None
+        key_main = _ask_choice("Enter key column in main sheet (exact name):", main_cols, parent=app)
+        if not key_main:
+            return None
+        key_lookup = _ask_choice("Enter key column in lookup file (exact name):", lookup_cols, parent=app)
+        if not key_lookup:
+            return None
 
-            keys_main = [key_main]
-            keys_lookup = [key_lookup]
-        else:
-            # ask for comma-separated list, validate each
-            prompt_main = "Enter comma-separated key columns in main sheet (in order):"
-            prompt_lookup = "Enter comma-separated key columns in lookup file (in same order):"
-            raw_main = simpledialog.askstring("VLOOKUP", f"{prompt_main}\nAvailable: {', '.join(main_cols)}", parent=app)
-            if not raw_main:
-                return None
-            keys_main = [c.strip() for c in raw_main.split(",") if c.strip()]
-            if any(k not in main_cols for k in keys_main):
-                messagebox.showerror("VLOOKUP", "One or more main sheet keys are invalid.")
-                return None
-
-            raw_lookup = simpledialog.askstring("VLOOKUP", f"{prompt_lookup}\nAvailable: {', '.join(lookup_cols)}", parent=app)
-            if not raw_lookup:
-                return None
-            keys_lookup = [c.strip() for c in raw_lookup.split(",") if c.strip()]
-            if any(k not in lookup_cols for k in keys_lookup):
-                messagebox.showerror("VLOOKUP", "One or more lookup file keys are invalid.")
-                return None
-
-            if len(keys_main) != len(keys_lookup):
-                messagebox.showerror("VLOOKUP", "Number of keys on both sides must match.")
-                return None
+        keys_main = [key_main]
+        keys_lookup = [key_lookup]
 
     if preset.get("values"):
         val_cols = [c.strip() for c in preset.get("values", "").split(",") if c.strip()]

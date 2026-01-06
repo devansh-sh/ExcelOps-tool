@@ -98,7 +98,6 @@ class ExcelOpsApp(tk.Tk):
         tools_m = tk.Menu(m, tearoff=False)
         m.add_cascade(label="Tools", menu=tools_m)
         tools_m.add_command(label="VLOOKUP…", command=self.apply_vlookup)
-        tools_m.add_command(label="VLOOKUP (Multi-Key)…", command=lambda: self.apply_vlookup(multi_key=True))
 
         edit_m = tk.Menu(m, tearoff=False)
         m.add_cascade(label="Edit", menu=edit_m)
@@ -498,9 +497,9 @@ class ExcelOpsApp(tk.Tk):
         return None
 
     def _build_vlookup_frame(self, parent):
-        return VlookupFrame(parent, self.apply_vlookup, lambda: self.apply_vlookup(multi_key=True))
+        return VlookupFrame(parent, self.apply_vlookup)
 
-    def apply_vlookup(self, multi_key: bool = False):
+    def apply_vlookup(self):
         if self.df is None:
             messagebox.showwarning("No data", "Load a file first.")
             return
@@ -512,7 +511,7 @@ class ExcelOpsApp(tk.Tk):
         preset_cfg = {}
         if "vlookup" in sheet and hasattr(sheet["vlookup"], "get_config"):
             preset_cfg = sheet["vlookup"].get_config()
-        merged = perform_vlookup(self, sheet, multi_key=multi_key, preset=preset_cfg)
+        merged = perform_vlookup(self, sheet, preset=preset_cfg)
         if merged is None:
             return
         self.df = merged.reset_index(drop=True)
