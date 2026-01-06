@@ -28,7 +28,7 @@ def _ask_choice(prompt: str, options: list[str], parent=None) -> str | None:
     return val
 
 
-def perform_vlookup(app, sheet, multi_key: bool = False):
+def perform_vlookup(app, sheet, preset: dict | None = None):
     """
     Perform left-join (VLOOKUP-like) merging the current sheet's filtered DataFrame
     with a user-selected lookup file.
@@ -79,8 +79,17 @@ def perform_vlookup(app, sheet, multi_key: bool = False):
     main_cols = list(main_df.columns.astype(str))
     lookup_cols = list(lookup_df.columns.astype(str))
 
-    # Ask for keys (support multi-key if user chooses)
-    if not multi_key:
+    preset = preset or {}
+    multi_key = False
+
+    if preset.get("main_keys") and preset.get("lookup_keys"):
+        keys_main = [c.strip() for c in preset.get("main_keys", "").split(",") if c.strip()]
+        keys_lookup = [c.strip() for c in preset.get("lookup_keys", "").split(",") if c.strip()]
+    else:
+        keys_main = []
+        keys_lookup = []
+
+    if not keys_main or not keys_lookup:
         key_main = _ask_choice("Enter key column in main sheet (exact name):", main_cols, parent=app)
         if not key_main:
             return None
@@ -90,52 +99,54 @@ def perform_vlookup(app, sheet, multi_key: bool = False):
 
         keys_main = [key_main]
         keys_lookup = [key_lookup]
+
+    if preset.get("values"):
+        val_cols = [c.strip() for c in preset.get("values", "").split(",") if c.strip()]
     else:
-        # ask for comma-separated list, validate each
-        prompt_main = "Enter comma-separated key columns in main sheet (in order):"
-        prompt_lookup = "Enter comma-separated key columns in lookup file (in same order):"
-        raw_main = simpledialog.askstring("VLOOKUP", f"{prompt_main}\nAvailable: {', '.join(main_cols)}", parent=app)
-        if not raw_main:
+        val_cols = []
+
+    if not val_cols:
+        # Ask which lookup value columns to bring (allow multiple, comma separated)
+        raw_vals = simpledialog.askstring(
+            "VLOOKUP",
+            f"Enter lookup column(s) to fetch (comma-separated):\nAvailable: {', '.join(lookup_cols)}",
+            parent=app
+        )
+        if not raw_vals:
             return None
-        keys_main = [c.strip() for c in raw_main.split(",") if c.strip()]
-        if any(k not in main_cols for k in keys_main):
-            messagebox.showerror("VLOOKUP", "One or more main sheet keys are invalid.")
+        val_cols = [c.strip() for c in raw_vals.split(",") if c.strip()]
+        if any(v not in lookup_cols for v in val_cols):
+            messagebox.showerror("VLOOKUP", "One or more selected value columns not found.")
             return None
 
-        raw_lookup = simpledialog.askstring("VLOOKUP", f"{prompt_lookup}\nAvailable: {', '.join(lookup_cols)}", parent=app)
-        if not raw_lookup:
-            return None
-        keys_lookup = [c.strip() for c in raw_lookup.split(",") if c.strip()]
-        if any(k not in lookup_cols for k in keys_lookup):
-            messagebox.showerror("VLOOKUP", "One or more lookup file keys are invalid.")
-            return None
-
-        if len(keys_main) != len(keys_lookup):
-            messagebox.showerror("VLOOKUP", "Number of keys on both sides must match.")
-            return None
-
-    # Ask which lookup value columns to bring (allow multiple, comma separated)
-    raw_vals = simpledialog.askstring("VLOOKUP",
-                                      f"Enter lookup column(s) to fetch (comma-separated):\nAvailable: {', '.join(lookup_cols)}",
-                                      parent=app)
-    if not raw_vals:
+    if any(k not in main_cols for k in keys_main):
+        messagebox.showerror("VLOOKUP", "One or more main sheet keys are invalid.")
         return None
-    val_cols = [c.strip() for c in raw_vals.split(",") if c.strip()]
-    if any(v not in lookup_cols for v in val_cols):
-        messagebox.showerror("VLOOKUP", "One or more selected value columns not found.")
+    if any(k not in lookup_cols for k in keys_lookup):
+        messagebox.showerror("VLOOKUP", "One or more lookup file keys are invalid.")
         return None
 
-    # New column prefix / name handling: ask for a prefix to avoid collisions
-    prefix = simpledialog.askstring("VLOOKUP", "Enter prefix for added columns (leave blank for none):", parent=app)
-    if prefix is None:
+    if len(keys_main) != len(keys_lookup):
+        messagebox.showerror("VLOOKUP", "Number of keys on both sides must match.")
         return None
-    prefix = prefix.strip()
 
-    # Ask fill value for missing matches
-    default_fill = simpledialog.askstring("VLOOKUP", "Enter default value for missing matches (leave blank for None):", parent=app)
-    if default_fill is None:
-        return None
+    prefix = preset.get("prefix", "")
+    default_fill = preset.get("default_fill", "")
+    prefix = prefix.strip() if isinstance(prefix, str) else ""
     default_fill = default_fill if default_fill != "" else None
+
+    if not preset.get("prefix") and not preset.get("default_fill"):
+        # New column prefix / name handling: ask for a prefix to avoid collisions
+        prefix = simpledialog.askstring("VLOOKUP", "Enter prefix for added columns (leave blank for none):", parent=app)
+        if prefix is None:
+            return None
+        prefix = prefix.strip()
+
+        # Ask fill value for missing matches
+        default_fill = simpledialog.askstring("VLOOKUP", "Enter default value for missing matches (leave blank for None):", parent=app)
+        if default_fill is None:
+            return None
+        default_fill = default_fill if default_fill != "" else None
 
     # Prepare for merge: rename lookup keys to match main keys if necessary
     try:
