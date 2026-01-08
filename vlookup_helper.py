@@ -82,13 +82,9 @@ def perform_vlookup(app, sheet, preset: dict | None = None):
     preset = preset or {}
     multi_key = False
 
-    if preset.get("main_keys"):
+    if preset.get("main_keys") and preset.get("lookup_keys"):
         keys_main = [c.strip() for c in preset.get("main_keys", "").split(",") if c.strip()]
-        raw_lookup = preset.get("lookup_keys", "").strip()
-        if raw_lookup:
-            keys_lookup = [c.strip() for c in raw_lookup.split(",") if c.strip()]
-        else:
-            keys_lookup = list(keys_main)
+        keys_lookup = [c.strip() for c in preset.get("lookup_keys", "").split(",") if c.strip()]
     else:
         keys_main = []
         keys_lookup = []
