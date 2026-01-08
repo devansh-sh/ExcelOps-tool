@@ -36,7 +36,6 @@ def perform_vlookup(app, sheet, preset: dict | None = None):
     Parameters:
       - app: reference to main app (for parent windows, updating)
       - sheet: the sheet dictionary (as used in your main app)
-      - multi_key (bool): if True, user can specify multiple key columns separated by commas.
 
     Returns:
       - merged DataFrame on success, or None on cancel/error.
