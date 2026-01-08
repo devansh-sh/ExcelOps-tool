@@ -78,13 +78,19 @@ def perform_vlookup(app, sheet, preset: dict | None = None):
     # Columns lists
     main_cols = list(main_df.columns.astype(str))
     lookup_cols = list(lookup_df.columns.astype(str))
+    main_col_map = {c.strip().lower(): c for c in main_cols}
+    lookup_col_map = {c.strip().lower(): c for c in lookup_cols}
 
     preset = preset or {}
     multi_key = False
 
-    if preset.get("main_keys") and preset.get("lookup_keys"):
+    if preset.get("main_keys"):
         keys_main = [c.strip() for c in preset.get("main_keys", "").split(",") if c.strip()]
-        keys_lookup = [c.strip() for c in preset.get("lookup_keys", "").split(",") if c.strip()]
+        raw_lookup = preset.get("lookup_keys", "").strip()
+        if raw_lookup:
+            keys_lookup = [c.strip() for c in raw_lookup.split(",") if c.strip()]
+        else:
+            keys_lookup = list(keys_main)
     else:
         keys_main = []
         keys_lookup = []
@@ -119,14 +125,31 @@ def perform_vlookup(app, sheet, preset: dict | None = None):
             messagebox.showerror("VLOOKUP", "One or more selected value columns not found.")
             return None
 
-    if any(k not in main_cols for k in keys_main):
-        messagebox.showerror("VLOOKUP", "One or more main sheet keys are invalid.")
-        return None
-    if any(k not in lookup_cols for k in keys_lookup):
-        messagebox.showerror("VLOOKUP", "One or more lookup file keys are invalid.")
-        return None
+    normalized_main_keys = []
+    for key in keys_main:
+        normalized = main_col_map.get(key.strip().lower())
+        if not normalized:
+            messagebox.showerror("VLOOKUP", f"Main key not found: {key}")
+            return None
+        normalized_main_keys.append(normalized)
 
-    if len(keys_main) != len(keys_lookup):
+    normalized_lookup_keys = []
+    for key in keys_lookup:
+        normalized = lookup_col_map.get(key.strip().lower())
+        if not normalized:
+            messagebox.showerror("VLOOKUP", f"Lookup key not found: {key}")
+            return None
+        normalized_lookup_keys.append(normalized)
+
+    normalized_values = []
+    for col in val_cols:
+        normalized = lookup_col_map.get(col.strip().lower())
+        if not normalized:
+            messagebox.showerror("VLOOKUP", f"Lookup value column not found: {col}")
+            return None
+        normalized_values.append(normalized)
+
+    if len(normalized_main_keys) != len(normalized_lookup_keys):
         messagebox.showerror("VLOOKUP", "Number of keys on both sides must match.")
         return None
 
@@ -151,11 +174,11 @@ def perform_vlookup(app, sheet, preset: dict | None = None):
     # Prepare for merge: rename lookup keys to match main keys if necessary
     try:
         # If key names identical length >1, create list-of-tuples merges
-        left_on = keys_main
-        right_on = keys_lookup
+        left_on = normalized_main_keys
+        right_on = normalized_lookup_keys
 
         # Select subset of lookup df with right keys + value columns
-        sel = right_on + val_cols
+        sel = right_on + normalized_values
         lookup_sub = lookup_df.loc[:, sel].copy()
 
         # Perform the merge
@@ -167,7 +190,7 @@ def perform_vlookup(app, sheet, preset: dict | None = None):
                 merged.drop(columns=[rk], inplace=True)
 
         # Rename added value columns to have prefix if provided (avoid overwriting existing)
-        for v in val_cols:
+        for v in normalized_values:
             if v in merged.columns:
                 new_name = f"{prefix}{v}" if prefix else v
                 # If name collides, attempt to make unique
@@ -184,7 +207,7 @@ def perform_vlookup(app, sheet, preset: dict | None = None):
                 if default_fill is not None:
                     merged[new_name].fillna(default_fill, inplace=True)
 
-        messagebox.showinfo("VLOOKUP", f"VLOOKUP merge complete — added: {', '.join([ (prefix + v if prefix else v) for v in val_cols]) }")
+        messagebox.showinfo("VLOOKUP", f"VLOOKUP merge complete — added: {', '.join([ (prefix + v if prefix else v) for v in normalized_values]) }")
         return merged
 
     except Exception as e:
