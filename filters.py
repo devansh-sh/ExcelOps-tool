@@ -208,9 +208,24 @@ class FiltersFrame(ttk.Frame):
         if not masks:
             return df
 
-        final = masks[0]
-        for i in range(1, len(masks)):
-            final = final | masks[i] if joins[i] == "OR" else final & masks[i]
+        groups = []
+        current = None
+        for i, m in enumerate(masks):
+            join = joins[i] if i < len(joins) else ""
+            if current is None:
+                current = m
+                continue
+            if join == "OR":
+                groups.append(current)
+                current = m
+            else:
+                current = current & m
+        if current is not None:
+            groups.append(current)
+
+        final = groups[0]
+        for g in groups[1:]:
+            final = final | g
 
         return df[final]
 
