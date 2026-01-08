@@ -208,9 +208,24 @@ class FiltersFrame(ttk.Frame):
         if not masks:
             return df
 
-        final = masks[0]
-        for i in range(1, len(masks)):
-            final = final | masks[i] if joins[i] == "OR" else final & masks[i]
+        groups = []
+        current = None
+        for i, m in enumerate(masks):
+            join = joins[i] if i < len(joins) else ""
+            if current is None:
+                current = m
+                continue
+            if join == "OR":
+                groups.append(current)
+                current = m
+            else:
+                current = current & m
+        if current is not None:
+            groups.append(current)
+
+        final = groups[0]
+        for g in groups[1:]:
+            final = final | g
 
         return df[final]
 
@@ -232,7 +247,16 @@ class FiltersFrame(ttk.Frame):
     def load_config(self, cfg: Dict[str, Any]):
         self.reset(silent=True)
         for f in cfg.get("filters", []):
-            self.add_row(f)
+            if isinstance(f, dict):
+                self.add_row(f)
+            elif isinstance(f, (list, tuple)) and len(f) >= 4:
+                self.add_row({
+                    "join": f[0],
+                    "col": f[1],
+                    "op": f[2],
+                    "val": f[3],
+                    "cmp": f[4] if len(f) > 4 else "",
+                })
         self._changed()
 
     # ---------------- Misc ----------------
