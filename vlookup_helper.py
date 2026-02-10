@@ -12,6 +12,28 @@ import pandas as pd
 from tkinter import filedialog, simpledialog, messagebox
 
 
+def _dedupe_keep_order(items):
+    seen = set()
+    out = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
+def _find_duplicate_columns(df: pd.DataFrame):
+    cols = [str(c) for c in df.columns]
+    seen = set()
+    dupes = []
+    for col in cols:
+        if col in seen and col not in dupes:
+            dupes.append(col)
+        seen.add(col)
+    return dupes
+
+
 def _ask_choice(prompt: str, options: list[str], parent=None) -> str | None:
     """Simple helper that asks user for a string; validates it is in options."""
     if not options:
@@ -81,7 +103,6 @@ def perform_vlookup(app, sheet, preset: dict | None = None):
     lookup_col_map = {c.strip().lower(): c for c in lookup_cols}
 
     preset = preset or {}
-    multi_key = False
 
     if preset.get("main_keys"):
         keys_main = [c.strip() for c in preset.get("main_keys", "").split(",") if c.strip()]
@@ -152,6 +173,16 @@ def perform_vlookup(app, sheet, preset: dict | None = None):
         messagebox.showerror("VLOOKUP", "Number of keys on both sides must match.")
         return None
 
+    main_dupes = _find_duplicate_columns(main_df)
+    if main_dupes:
+        messagebox.showerror("VLOOKUP", f"Main file has duplicate column names: {', '.join(main_dupes)}")
+        return None
+
+    lookup_dupes = _find_duplicate_columns(lookup_df)
+    if lookup_dupes:
+        messagebox.showerror("VLOOKUP", f"Lookup file has duplicate column names: {', '.join(lookup_dupes)}")
+        return None
+
     prefix = preset.get("prefix", "")
     default_fill = preset.get("default_fill", "")
     prefix = prefix.strip() if isinstance(prefix, str) else ""
@@ -170,43 +201,49 @@ def perform_vlookup(app, sheet, preset: dict | None = None):
             return None
         default_fill = default_fill if default_fill != "" else None
 
-    # Prepare for merge: rename lookup keys to match main keys if necessary
+    # Prepare for merge: dedupe selections and exclude key columns from value fetch.
     try:
-        # If key names identical length >1, create list-of-tuples merges
-        left_on = normalized_main_keys
-        right_on = normalized_lookup_keys
+        left_on = _dedupe_keep_order(normalized_main_keys)
+        right_on = _dedupe_keep_order(normalized_lookup_keys)
 
-        # Select subset of lookup df with right keys + value columns
-        sel = right_on + normalized_values
-        lookup_sub = lookup_df.loc[:, sel].copy()
+        key_set = set(right_on)
+        lookup_value_cols = _dedupe_keep_order([c for c in normalized_values if c not in key_set])
 
-        # Perform the merge
+        merge_cols = _dedupe_keep_order(right_on + lookup_value_cols)
+        lookup_sub = lookup_df.loc[:, merge_cols].copy()
+
+        added_cols = []
+        rename_map = {}
+        reserved = set(str(c) for c in main_df.columns)
+        for col in lookup_value_cols:
+            base_name = f"{prefix}{col}" if prefix else col
+            new_name = base_name
+            suffix_i = 1
+            while new_name in reserved:
+                new_name = f"{base_name}_lk{suffix_i}"
+                suffix_i += 1
+            reserved.add(new_name)
+            rename_map[col] = new_name
+            added_cols.append(new_name)
+
+        if rename_map:
+            lookup_sub.rename(columns=rename_map, inplace=True)
+
         merged = main_df.merge(lookup_sub, how="left", left_on=left_on, right_on=right_on, suffixes=("", "_lk"))
 
-        # If lookup used different key names, drop duplicate right-key columns if present
         for rk, lk in zip(right_on, left_on):
             if rk != lk and rk in merged.columns:
                 merged.drop(columns=[rk], inplace=True)
 
-        # Rename added value columns to have prefix if provided (avoid overwriting existing)
-        for v in normalized_values:
-            if v in merged.columns:
-                new_name = f"{prefix}{v}" if prefix else v
-                # If name collides, attempt to make unique
-                if new_name in main_df.columns:
-                    # append "_lk" or numeric suffix
-                    base = new_name
-                    i = 1
-                    while new_name in merged.columns:
-                        new_name = f"{base}_lk{i}"
-                        i += 1
-                merged.rename(columns={v: new_name}, inplace=True)
+        if default_fill is not None:
+            for col in added_cols:
+                if col in merged.columns:
+                    merged[col] = merged[col].fillna(default_fill)
 
-                # fill missing
-                if default_fill is not None:
-                    merged[new_name].fillna(default_fill, inplace=True)
-
-        messagebox.showinfo("VLOOKUP", f"VLOOKUP merge complete — added: {', '.join([ (prefix + v if prefix else v) for v in normalized_values]) }")
+        if added_cols:
+            messagebox.showinfo("VLOOKUP", f"VLOOKUP merge complete — added: {', '.join(added_cols)}")
+        else:
+            messagebox.showinfo("VLOOKUP", "VLOOKUP match complete — no value columns added (keys-only match).")
         return merged
 
     except Exception as e:
