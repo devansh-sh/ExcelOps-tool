@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import pandas as pd
 
-PRESET_DIR = os.path.join(os.getcwd(), "presets")
+PRESET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "presets")
 
 
 class PresetManager:
@@ -71,6 +71,7 @@ class PresetManager:
                 "sorts": s["sorts"].get_config(),
                 "columns": s["columns"].get_config(),
                 "pivot": s["pivot"].get_config(),
+                "vlookup": s["vlookup"].get_config() if "vlookup" in s else {},
             }
             data["sheets"].append(sheet_cfg)
 
@@ -119,10 +120,20 @@ class PresetManager:
             s["sorts"].load_config(sheet_cfg.get("sorts", {}))
             s["columns"].load_config(sheet_cfg.get("columns", {}))
             s["pivot"].load_config(sheet_cfg.get("pivot", {}))
+            if "vlookup" in s:
+                s["vlookup"].load_config(sheet_cfg.get("vlookup", {}))
 
             # ensure df is wired so dropdowns populate
             try:
                 s["filters"].refresh_source_df(app.df)
+            except Exception:
+                pass
+            try:
+                s["columns"].refresh_source_df(app.df)
+            except Exception:
+                pass
+            try:
+                s["pivot"].refresh_source_df(app.df)
             except Exception:
                 pass
 
