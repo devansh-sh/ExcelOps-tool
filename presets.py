@@ -137,6 +137,17 @@ class PresetManager:
             except Exception:
                 pass
 
+            # auto-run VLOOKUP on preset load if configuration is present
+            try:
+                vlookup_cfg = sheet_cfg.get("vlookup", {})
+                has_keys = bool((vlookup_cfg.get("main_keys", "") or "").strip())
+                has_values = bool((vlookup_cfg.get("values", "") or "").strip())
+                has_lookup_file = bool((vlookup_cfg.get("lookup_file", "") or "").strip())
+                if has_keys and has_values and has_lookup_file and hasattr(app, "_run_vlookup_for_sheet"):
+                    app._run_vlookup_for_sheet(s, interactive=False)
+            except Exception:
+                pass
+
         app.update_preview()
         messagebox.showinfo("Preset Loaded", f"Preset '{name}' loaded.")
 

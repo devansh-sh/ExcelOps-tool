@@ -50,7 +50,14 @@ def _ask_choice(prompt: str, options: list[str], parent=None) -> str | None:
     return val
 
 
-def perform_vlookup(app, sheet, preset: dict | None = None, lookup_df: pd.DataFrame | None = None, lookup_path: str | None = None):
+def perform_vlookup(
+    app,
+    sheet,
+    preset: dict | None = None,
+    lookup_df: pd.DataFrame | None = None,
+    lookup_path: str | None = None,
+    interactive: bool = True,
+):
     """
     Perform left-join (VLOOKUP-like) merging the current sheet's filtered DataFrame
     with a user-selected lookup file.
@@ -76,6 +83,9 @@ def perform_vlookup(app, sheet, preset: dict | None = None, lookup_df: pd.DataFr
 
     # Ask user to pick lookup file if one is not already selected from the VLOOKUP tab.
     if lookup_df is None:
+        if not interactive:
+            messagebox.showwarning("VLOOKUP", "Lookup file is required in preset to auto-run VLOOKUP.")
+            return None
         lookup_path = filedialog.askopenfilename(
             title="Select lookup file (Excel or CSV)",
             filetypes=[("Excel/CSV", "*.xlsx *.xls *.csv")]
@@ -189,7 +199,7 @@ def perform_vlookup(app, sheet, preset: dict | None = None, lookup_df: pd.DataFr
     prefix = prefix.strip() if isinstance(prefix, str) else ""
     default_fill = default_fill if default_fill != "" else None
 
-    if not preset.get("prefix") and not preset.get("default_fill"):
+    if not preset.get("prefix") and not preset.get("default_fill") and interactive:
         # New column prefix / name handling: ask for a prefix to avoid collisions
         prefix = simpledialog.askstring("VLOOKUP", "Enter prefix for added columns (leave blank for none):", parent=app)
         if prefix is None:

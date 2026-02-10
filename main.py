@@ -527,6 +527,53 @@ class ExcelOpsApp(tk.Tk):
             if vf and hasattr(vf, "set_lookup_source"):
                 vf.set_lookup_source(path, list(lookup_df.columns))
 
+    def _load_lookup_file_for_path(self, path: str):
+        if not path:
+            return None
+        try:
+            if path.lower().endswith(".csv"):
+                return self._read_csv_safely(path)
+            return pd.read_excel(path)
+        except Exception:
+            return None
+
+    def _run_vlookup_for_sheet(self, sheet, interactive=True):
+        preset_cfg = {}
+        if "vlookup" in sheet and hasattr(sheet["vlookup"], "get_config"):
+            preset_cfg = sheet["vlookup"].get_config()
+
+        lookup_path = self.lookup_path
+        lookup_df = self.lookup_df
+        preset_lookup_path = (preset_cfg or {}).get("lookup_file", "").strip()
+        if preset_lookup_path:
+            if lookup_path != preset_lookup_path:
+                loaded = self._load_lookup_file_for_path(preset_lookup_path)
+                if loaded is not None:
+                    lookup_path = preset_lookup_path
+                    lookup_df = loaded
+            elif lookup_df is None:
+                loaded = self._load_lookup_file_for_path(preset_lookup_path)
+                if loaded is not None:
+                    lookup_df = loaded
+
+        merged = perform_vlookup(
+            self,
+            sheet,
+            preset=preset_cfg,
+            lookup_df=lookup_df,
+            lookup_path=lookup_path,
+            interactive=interactive,
+        )
+        if merged is None:
+            return False
+
+        self.df = merged.reset_index(drop=True)
+        self.lookup_path = lookup_path
+        self.lookup_df = lookup_df
+        self._refresh_filters_after_data_change()
+        self.update_preview()
+        return True
+
     def apply_vlookup(self):
         if self.df is None:
             messagebox.showwarning("No data", "Load a file first.")
@@ -536,15 +583,7 @@ class ExcelOpsApp(tk.Tk):
             messagebox.showwarning("No sheet", "Select a sheet to run VLOOKUP.")
             return
         sheet = self.sheets[idx]
-        preset_cfg = {}
-        if "vlookup" in sheet and hasattr(sheet["vlookup"], "get_config"):
-            preset_cfg = sheet["vlookup"].get_config()
-        merged = perform_vlookup(self, sheet, preset=preset_cfg, lookup_df=self.lookup_df, lookup_path=self.lookup_path)
-        if merged is None:
-            return
-        self.df = merged.reset_index(drop=True)
-        self._refresh_filters_after_data_change()
-        self.update_preview()
+        self._run_vlookup_for_sheet(sheet, interactive=True)
 
     # ---------------- Preview tab handling ----------------
     def open_preview_tab(self):
