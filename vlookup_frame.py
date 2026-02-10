@@ -3,15 +3,18 @@ from tkinter import ttk
 
 
 class VlookupFrame(ttk.Frame):
-    def __init__(self, parent, on_vlookup, columns=None):
+    def __init__(self, parent, on_vlookup, on_pick_lookup_file=None, columns=None):
         super().__init__(parent)
         self.on_vlookup = on_vlookup
+        self.on_pick_lookup_file = on_pick_lookup_file
         self.columns = columns or []
+        self.lookup_columns = []
         self.main_keys_var = tk.StringVar()
         self.lookup_keys_var = tk.StringVar()
         self.values_var = tk.StringVar()
         self.prefix_var = tk.StringVar()
         self.default_fill_var = tk.StringVar()
+        self.lookup_file_var = tk.StringVar()
         self.same_keys_var = tk.BooleanVar(value=True)
         self._build_ui()
 
@@ -39,7 +42,7 @@ class VlookupFrame(ttk.Frame):
         self.main_keys_lb = tk.Listbox(form, selectmode="multiple", height=6, exportselection=False)
         self.main_keys_lb.grid(row=1, column=0, sticky="nsew", padx=6, pady=4)
 
-        ttk.Label(form, text="Lookup value columns").grid(row=0, column=1, sticky="w", padx=6, pady=4)
+        ttk.Label(form, text="Lookup value columns (from lookup file)").grid(row=0, column=1, sticky="w", padx=6, pady=4)
         self.values_lb = tk.Listbox(form, selectmode="multiple", height=6, exportselection=False)
         self.values_lb.grid(row=1, column=1, sticky="nsew", padx=6, pady=4)
 
@@ -63,6 +66,16 @@ class VlookupFrame(ttk.Frame):
         ttk.Label(options, text="Default fill (optional)").pack(anchor="w")
         ttk.Entry(options, textvariable=self.default_fill_var, width=28).pack(fill="x", pady=(2, 6))
 
+        lookup_picker = ttk.Frame(self)
+        lookup_picker.pack(fill="x", **pad)
+        ttk.Label(lookup_picker, text="Lookup file:").pack(side="left")
+        ttk.Entry(lookup_picker, textvariable=self.lookup_file_var, state="readonly", width=60).pack(side="left", padx=(6, 6))
+        ttk.Button(
+            lookup_picker,
+            text="Choose Lookup File",
+            command=self.on_pick_lookup_file if callable(self.on_pick_lookup_file) else None,
+        ).pack(side="left")
+
         actions = ttk.Frame(self)
         actions.pack(fill="x", **pad)
 
@@ -78,6 +91,7 @@ class VlookupFrame(ttk.Frame):
             "values": ", ".join(values),
             "prefix": self.prefix_var.get(),
             "default_fill": self.default_fill_var.get(),
+            "lookup_file": self.lookup_file_var.get(),
         }
 
     def load_config(self, cfg: dict):
@@ -86,6 +100,7 @@ class VlookupFrame(ttk.Frame):
         self.values_var.set(cfg.get("values", ""))
         self.prefix_var.set(cfg.get("prefix", ""))
         self.default_fill_var.set(cfg.get("default_fill", ""))
+        self.lookup_file_var.set(cfg.get("lookup_file", ""))
         self.same_keys_var.set(cfg.get("lookup_keys", "") == "")
         self._apply_listbox_selections()
         self._toggle_lookup_keys()
@@ -93,7 +108,12 @@ class VlookupFrame(ttk.Frame):
     def set_columns(self, columns):
         self.columns = columns or []
         self._refresh_listbox(self.main_keys_lb, self.columns)
-        self._refresh_listbox(self.values_lb, self.columns)
+        self._apply_listbox_selections()
+
+    def set_lookup_source(self, path: str, columns):
+        self.lookup_file_var.set(path or "")
+        self.lookup_columns = columns or []
+        self._refresh_listbox(self.values_lb, self.lookup_columns)
         self._apply_listbox_selections()
 
     def _refresh_listbox(self, listbox, values):

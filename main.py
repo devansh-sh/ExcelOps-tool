@@ -38,6 +38,8 @@ class ExcelOpsApp(tk.Tk):
         self.preview_deletable = False
         self._last_csv_sep: str | None = None
         self._last_csv_encoding: str | None = None
+        self.lookup_path: str | None = None
+        self.lookup_df: pd.DataFrame | None = None
         # sheets: list of dicts {name, tab, inner_nb, filters, sorts, columns, pivot}
         self.sheets = []
         self.plus_tab = None  # identifier for '+' tab
@@ -378,6 +380,8 @@ class ExcelOpsApp(tk.Tk):
         pivot_frame = PivotFrame(inner_nb, self.on_pivot_preview, self.df, data_provider=lambda: self._generate_base_df(sheet))
         vlookup_frame = self._build_vlookup_frame(inner_nb)
         vlookup_frame.set_columns(list(self.df.columns))
+        if self.lookup_df is not None:
+            vlookup_frame.set_lookup_source(self.lookup_path or "", list(self.lookup_df.columns))
 
         inner_nb.add(filters_frame, text="Filter")
         inner_nb.add(sorts_frame, text="Sort")
@@ -497,7 +501,31 @@ class ExcelOpsApp(tk.Tk):
         return None
 
     def _build_vlookup_frame(self, parent):
-        return VlookupFrame(parent, self.apply_vlookup)
+        return VlookupFrame(parent, self.apply_vlookup, self.choose_lookup_file)
+
+    def choose_lookup_file(self):
+        path = filedialog.askopenfilename(
+            title="Select lookup file (Excel or CSV)",
+            filetypes=[("Excel/CSV", "*.xlsx *.xls *.csv")],
+        )
+        if not path:
+            return
+        try:
+            if path.lower().endswith(".csv"):
+                lookup_df = self._read_csv_safely(path)
+            else:
+                lookup_df = pd.read_excel(path)
+        except Exception as e:
+            messagebox.showerror("Lookup load error", str(e))
+            return
+
+        self.lookup_path = path
+        self.lookup_df = lookup_df
+
+        for s in self.sheets:
+            vf = s.get("vlookup")
+            if vf and hasattr(vf, "set_lookup_source"):
+                vf.set_lookup_source(path, list(lookup_df.columns))
 
     def apply_vlookup(self):
         if self.df is None:
@@ -511,7 +539,7 @@ class ExcelOpsApp(tk.Tk):
         preset_cfg = {}
         if "vlookup" in sheet and hasattr(sheet["vlookup"], "get_config"):
             preset_cfg = sheet["vlookup"].get_config()
-        merged = perform_vlookup(self, sheet, preset=preset_cfg)
+        merged = perform_vlookup(self, sheet, preset=preset_cfg, lookup_df=self.lookup_df, lookup_path=self.lookup_path)
         if merged is None:
             return
         self.df = merged.reset_index(drop=True)

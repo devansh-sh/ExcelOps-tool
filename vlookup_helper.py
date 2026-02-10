@@ -50,7 +50,7 @@ def _ask_choice(prompt: str, options: list[str], parent=None) -> str | None:
     return val
 
 
-def perform_vlookup(app, sheet, preset: dict | None = None):
+def perform_vlookup(app, sheet, preset: dict | None = None, lookup_df: pd.DataFrame | None = None, lookup_path: str | None = None):
     """
     Perform left-join (VLOOKUP-like) merging the current sheet's filtered DataFrame
     with a user-selected lookup file.
@@ -74,23 +74,24 @@ def perform_vlookup(app, sheet, preset: dict | None = None):
         messagebox.showwarning("VLOOKUP", "No data available in the current sheet to perform VLOOKUP on.")
         return None
 
-    # Ask user to pick lookup file
-    lookup_path = filedialog.askopenfilename(
-        title="Select lookup file (Excel or CSV)",
-        filetypes=[("Excel/CSV", "*.xlsx *.xls *.csv")]
-    )
-    if not lookup_path:
-        return None
+    # Ask user to pick lookup file if one is not already selected from the VLOOKUP tab.
+    if lookup_df is None:
+        lookup_path = filedialog.askopenfilename(
+            title="Select lookup file (Excel or CSV)",
+            filetypes=[("Excel/CSV", "*.xlsx *.xls *.csv")]
+        )
+        if not lookup_path:
+            return None
 
-    # Load lookup DataFrame
-    try:
-        if lookup_path.lower().endswith(".csv"):
-            lookup_df = pd.read_csv(lookup_path)
-        else:
-            lookup_df = pd.read_excel(lookup_path)
-    except Exception as e:
-        messagebox.showerror("VLOOKUP", f"Failed to load lookup file:\n{e}")
-        return None
+        # Load lookup DataFrame
+        try:
+            if lookup_path.lower().endswith(".csv"):
+                lookup_df = pd.read_csv(lookup_path)
+            else:
+                lookup_df = pd.read_excel(lookup_path)
+        except Exception as e:
+            messagebox.showerror("VLOOKUP", f"Failed to load lookup file:\n{e}")
+            return None
 
     if lookup_df is None or lookup_df.empty:
         messagebox.showwarning("VLOOKUP", "Lookup file is empty.")
