@@ -2,6 +2,19 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
+from pandas.api import types as ptypes
+
+
+def _coerce_numeric_series(s: pd.Series) -> pd.Series:
+    if ptypes.is_numeric_dtype(s):
+        return s
+    return pd.to_numeric(
+        s.astype(str)
+        .str.replace(",", "", regex=False)
+        .str.replace("%", "", regex=False)
+        .str.strip(),
+        errors="coerce",
+    )
 
 
 class PivotFrame(ttk.Frame):
@@ -130,30 +143,49 @@ class PivotFrame(ttk.Frame):
         if not rows:
             return None
 
+        missing = [c for c in rows + cols + vals if c not in df.columns]
+        if missing:
+            messagebox.showerror("Pivot error", f"Missing column(s): {', '.join(sorted(set(missing)))}")
+            return None
+
+        pivot_df = df.copy()
+        numeric_aggs = {"sum", "mean", "min", "max"}
+        if vals and agg in numeric_aggs:
+            for col in vals:
+                pivot_df[col] = _coerce_numeric_series(pivot_df[col])
+
         try:
             if vals:
                 pt = pd.pivot_table(
-                    df,
+                    pivot_df,
                     index=rows,
                     columns=cols if cols else None,
                     values=vals,
                     aggfunc=agg,
-                    fill_value=0
+                    fill_value=0,
+                    dropna=False,
                 )
             else:
                 pt = pd.pivot_table(
-                    df,
+                    pivot_df,
                     index=rows,
                     columns=cols if cols else None,
                     aggfunc="size",
-                    fill_value=0
+                    fill_value=0,
+                    dropna=False,
                 )
                 pt = pt.rename("Count")
+
             if isinstance(pt.columns, pd.MultiIndex):
                 pt.columns = [" | ".join([str(c) for c in col if c != ""]) for col in pt.columns.values]
             elif isinstance(pt.columns, pd.Index):
                 pt.columns = [str(c) for c in pt.columns]
-            return pt.reset_index()
+
+            out = pt.reset_index()
+            if out.empty:
+                messagebox.showinfo("Pivot", "No rows produced for the selected pivot setup.")
+                return None
+            return out
         except Exception as e:
             messagebox.showerror("Pivot error", str(e))
             return None
