@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import pandas as pd
 
-PRESET_DIR = os.path.join(os.getcwd(), "presets")
+PRESET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "presets")
 
 
 class PresetManager:
@@ -71,6 +71,7 @@ class PresetManager:
                 "sorts": s["sorts"].get_config(),
                 "columns": s["columns"].get_config(),
                 "pivot": s["pivot"].get_config(),
+                "vlookup": s["vlookup"].get_config() if "vlookup" in s else {},
             }
             data["sheets"].append(sheet_cfg)
 
@@ -119,10 +120,31 @@ class PresetManager:
             s["sorts"].load_config(sheet_cfg.get("sorts", {}))
             s["columns"].load_config(sheet_cfg.get("columns", {}))
             s["pivot"].load_config(sheet_cfg.get("pivot", {}))
+            if "vlookup" in s:
+                s["vlookup"].load_config(sheet_cfg.get("vlookup", {}))
 
             # ensure df is wired so dropdowns populate
             try:
                 s["filters"].refresh_source_df(app.df)
+            except Exception:
+                pass
+            try:
+                s["columns"].refresh_source_df(app.df)
+            except Exception:
+                pass
+            try:
+                s["pivot"].refresh_source_df(app.df)
+            except Exception:
+                pass
+
+            # auto-run VLOOKUP on preset load if configuration is present
+            try:
+                vlookup_cfg = sheet_cfg.get("vlookup", {})
+                has_keys = bool((vlookup_cfg.get("main_keys", "") or "").strip())
+                has_values = bool((vlookup_cfg.get("values", "") or "").strip())
+                has_lookup_file = bool((vlookup_cfg.get("lookup_file", "") or "").strip())
+                if has_keys and has_values and has_lookup_file and hasattr(app, "_run_vlookup_for_sheet"):
+                    app._run_vlookup_for_sheet(s, interactive=False)
             except Exception:
                 pass
 
