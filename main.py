@@ -598,7 +598,7 @@ class ExcelOpsApp(tk.Tk):
             self.nb.insert(self.plus_tab, pf, text="Preview")
         else:
             self.nb.add(pf, text="Preview")
-        self.preview_tab_id = self.nb.tabs()[-1]  # last added id
+        self.preview_tab_id = str(pf)
 
         # attach the reusable preview_tree and scrollbars into this frame
         tree_holder = ttk.Frame(pf)
