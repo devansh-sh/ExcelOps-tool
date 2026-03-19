@@ -43,7 +43,8 @@ class ColumnsManagerFrame(ttk.Frame):
         ttk.Button(btns, text="Move Up", command=self._move_up).pack(side="left", padx=4)
         ttk.Button(btns, text="Move Down", command=self._move_down).pack(side="left", padx=4)
         ttk.Button(btns, text="Hide Column", command=self._toggle_visibility).pack(side="left", padx=4)
-        ttk.Button(btns, text="Show All", command=self._show_all).pack(side="left", padx=4)
+        ttk.Button(btns, text="Select All", command=self._show_all).pack(side="left", padx=4)
+        ttk.Button(btns, text="Unselect All", command=self._hide_all).pack(side="left", padx=4)
         ttk.Button(btns, text="Apply Changes", command=self._apply).pack(side="right", padx=4)
 
         # ---------- Duplicates ----------
@@ -124,6 +125,12 @@ class ColumnsManagerFrame(ttk.Frame):
     def _show_all(self):
         for c in self.column_visible:
             self.column_visible[c] = True
+        self._refresh_listbox()
+        self._changed()
+
+    def _hide_all(self):
+        for c in self.column_visible:
+            self.column_visible[c] = False
         self._refresh_listbox()
         self._changed()
 
