@@ -43,7 +43,8 @@ class ColumnsManagerFrame(ttk.Frame):
         ttk.Button(btns, text="Move Up", command=self._move_up).pack(side="left", padx=4)
         ttk.Button(btns, text="Move Down", command=self._move_down).pack(side="left", padx=4)
         ttk.Button(btns, text="Hide Column", command=self._toggle_visibility).pack(side="left", padx=4)
-        ttk.Button(btns, text="Show All", command=self._show_all).pack(side="left", padx=4)
+        ttk.Button(btns, text="Select All", command=self._show_all).pack(side="left", padx=4)
+        ttk.Button(btns, text="Unselect All", command=self._hide_all).pack(side="left", padx=4)
         ttk.Button(btns, text="Apply Changes", command=self._apply).pack(side="right", padx=4)
 
         # ---------- Duplicates ----------
@@ -127,6 +128,12 @@ class ColumnsManagerFrame(ttk.Frame):
         self._refresh_listbox()
         self._changed()
 
+    def _hide_all(self):
+        for c in self.column_visible:
+            self.column_visible[c] = False
+        self._refresh_listbox()
+        self._changed()
+
     def _apply(self):
         self._changed()
 
@@ -187,6 +194,22 @@ class ColumnsManagerFrame(ttk.Frame):
         self.duplicate_column_var.set("")
         self._refresh_listbox()
         self._changed()
+
+    def refresh_source_df(self, df: pd.DataFrame | None):
+        self.df = df
+        if df is None:
+            return
+        current_cols = list(df.columns)
+        for c in current_cols:
+            if c not in self.column_order:
+                self.column_order.append(c)
+                self.column_visible[c] = True
+        self.column_order = [c for c in self.column_order if c in current_cols]
+        self.column_visible = {c: self.column_visible.get(c, True) for c in self.column_order}
+        self.dup_col_cb["values"] = self.column_order
+        if self.duplicate_column_var.get() not in self.column_order:
+            self.duplicate_column_var.set("")
+        self._refresh_listbox()
 
     # ------------------------------------------------------------------
     def _changed(self):
