@@ -28,6 +28,7 @@ class ColumnsManagerFrame(ttk.Frame):
         self.formulas: List[Dict[str, str]] = []
         self.formula_name_var = tk.StringVar()
         self.formula_expr_var = tk.StringVar()
+        self.formula_column_picker_var = tk.StringVar()
 
         self._build_ui()
 
@@ -68,6 +69,19 @@ class ColumnsManagerFrame(ttk.Frame):
         ttk.Label(form_row, text="Formula").pack(side="left")
         ttk.Entry(form_row, textvariable=self.formula_expr_var, width=52).pack(side="left", padx=(6, 6), fill="x", expand=True)
 
+        picker_row = ttk.Frame(calc)
+        picker_row.pack(fill="x", padx=4, pady=(0, 2))
+        ttk.Label(picker_row, text="Insert Column in Formula").pack(side="left")
+        self.formula_col_cb = ttk.Combobox(
+            picker_row,
+            textvariable=self.formula_column_picker_var,
+            state="readonly",
+            values=self.column_order,
+            width=28,
+        )
+        self.formula_col_cb.pack(side="left", padx=(6, 6))
+        ttk.Button(picker_row, text="Insert", command=self._insert_selected_column_into_formula).pack(side="left")
+
         calc_btns = ttk.Frame(calc)
         calc_btns.pack(fill="x", padx=4, pady=2)
         ttk.Button(calc_btns, text="Add / Update Formula", command=self._upsert_formula).pack(side="left", padx=4)
@@ -97,6 +111,7 @@ class ColumnsManagerFrame(ttk.Frame):
         self.dup_col_cb.pack(fill="x", padx=4, pady=2)
         self.dup_col_cb.bind("<<ComboboxSelected>>", lambda e: self._changed())
 
+        self.formula_col_cb["values"] = self.column_order
         self._refresh_listbox()
         self._refresh_formula_listbox()
 
@@ -184,6 +199,15 @@ class ColumnsManagerFrame(ttk.Frame):
         f = self.formulas[i]
         self.formula_name_var.set(f.get("name", ""))
         self.formula_expr_var.set(f.get("expr", ""))
+
+    def _insert_selected_column_into_formula(self):
+        col = self.formula_column_picker_var.get().strip()
+        if not col:
+            return
+        current = self.formula_expr_var.get()
+        col_token = f"`{col}`" if " " in col else col
+        new_expr = f"{current} {col_token}".strip() if current else col_token
+        self.formula_expr_var.set(new_expr)
 
     def _upsert_formula(self):
         name = self.formula_name_var.get().strip()
@@ -300,6 +324,7 @@ class ColumnsManagerFrame(ttk.Frame):
         self.formulas = []
         self.formula_name_var.set("")
         self.formula_expr_var.set("")
+        self.formula_column_picker_var.set("")
         self.remove_duplicates_var.set(False)
         self.duplicate_column_var.set("")
         self._refresh_formula_listbox()
@@ -322,6 +347,7 @@ class ColumnsManagerFrame(ttk.Frame):
         self.column_order = [c for c in self.column_order if c in current_cols or c in formula_cols]
         self.column_visible = {c: self.column_visible.get(c, True) for c in self.column_order}
         self.dup_col_cb["values"] = self.column_order
+        self.formula_col_cb["values"] = current_cols
         if self.duplicate_column_var.get() not in self.column_order:
             self.duplicate_column_var.set("")
 
