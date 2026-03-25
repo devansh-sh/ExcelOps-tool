@@ -45,6 +45,45 @@ class PresetManager:
     # ---------- UI actions ----------
 
     @staticmethod
+    def _choose_preset_name(parent, title: str, presets: list[str]) -> str | None:
+        win = tk.Toplevel(parent)
+        win.title(title)
+        win.geometry("360x360")
+        win.transient(parent)
+        win.grab_set()
+
+        ttk.Label(win, text="Select a preset:").pack(anchor="w", padx=10, pady=(10, 4))
+
+        lb = tk.Listbox(win, exportselection=False)
+        lb.pack(fill="both", expand=True, padx=10, pady=(0, 8))
+        for name in presets:
+            lb.insert("end", name)
+        if presets:
+            lb.selection_set(0)
+
+        selected = {"value": None}
+
+        def on_ok():
+            sel = lb.curselection()
+            if not sel:
+                return
+            selected["value"] = lb.get(sel[0])
+            win.destroy()
+
+        def on_cancel():
+            win.destroy()
+
+        btns = ttk.Frame(win)
+        btns.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(btns, text="Cancel", command=on_cancel).pack(side="right", padx=4)
+        ttk.Button(btns, text="Load", command=on_ok).pack(side="right", padx=4)
+
+        lb.bind("<Double-1>", lambda e: on_ok())
+        win.wait_window()
+        return selected["value"]
+
+
+    @staticmethod
     def save(app):
         """
         Save preset from CURRENT sheets
@@ -90,10 +129,7 @@ class PresetManager:
             messagebox.showinfo("No Presets", "No presets available.")
             return
 
-        name = simpledialog.askstring(
-            "Load Preset",
-            "Available presets:\n\n" + "\n".join(presets) + "\n\nEnter preset name:"
-        )
+        name = PresetManager._choose_preset_name(app, "Load Preset", presets)
         if not name:
             return
 
@@ -194,11 +230,7 @@ class PresetManager:
             messagebox.showerror("No Presets", "No presets available.")
             return None
 
-        return simpledialog.askstring(
-            "Select Preset",
-            "Available presets:\n\n" + "\n".join(presets) + "\n\nEnter preset name:",
-            parent=parent
-        )
+        return PresetManager._choose_preset_name(parent, "Select Preset", presets)
 
     @staticmethod
     def load_preset_data(name: str) -> dict:
