@@ -72,6 +72,33 @@ class ColumnsManagerFrame(ttk.Frame):
         ttk.Button(btns, text="Unselect All", command=self._hide_all).pack(side="left", padx=4)
         ttk.Button(btns, text="Apply Changes", command=self._apply).pack(side="right", padx=4)
 
+        dup = ttk.LabelFrame(self, text="Remove Duplicate Rows")
+        dup.pack(fill="x", padx=6, pady=(0, 6))
+
+        dup_row = ttk.Frame(dup)
+        dup_row.pack(fill="x", padx=4, pady=4)
+        ttk.Checkbutton(
+            dup_row,
+            text="Enable duplicate removal",
+            variable=self.remove_duplicates_var,
+            command=self._changed,
+        ).pack(side="left")
+        ttk.Label(dup_row, text="Column:").pack(side="left", padx=(16, 4))
+        self.dup_col_cb = ttk.Combobox(
+            dup_row,
+            textvariable=self.duplicate_column_var,
+            state="readonly",
+            values=self.column_order,
+            width=32,
+        )
+        self.dup_col_cb.pack(side="left", padx=(0, 6))
+        self.dup_col_cb.bind("<<ComboboxSelected>>", lambda e: self._on_duplicate_column_selected())
+        ttk.Label(
+            dup,
+            text="Select a column to keep the first row for each repeated value.",
+            foreground="#4b5563",
+        ).pack(anchor="w", padx=4, pady=(0, 4))
+
         calc = ttk.LabelFrame(self, text="Calculated Columns")
         calc.pack(fill="both", padx=6, pady=(0, 6))
 
@@ -135,25 +162,6 @@ class ColumnsManagerFrame(ttk.Frame):
         self.formula_list.pack(fill="x", padx=4, pady=(2, 4))
         self.formula_list.bind("<<ListboxSelect>>", lambda e: self._on_formula_selected())
 
-        dup = ttk.LabelFrame(self, text="Duplicates")
-        dup.pack(fill="x", padx=6, pady=(0, 6))
-
-        ttk.Checkbutton(
-            dup,
-            text="Remove duplicate rows based on column",
-            variable=self.remove_duplicates_var,
-            command=self._changed,
-        ).pack(anchor="w", padx=4, pady=2)
-
-        self.dup_col_cb = ttk.Combobox(
-            dup,
-            textvariable=self.duplicate_column_var,
-            state="readonly",
-            values=self.column_order,
-        )
-        self.dup_col_cb.pack(fill="x", padx=4, pady=2)
-        self.dup_col_cb.bind("<<ComboboxSelected>>", lambda e: self._changed())
-
         self._refresh_formula_column_choices(self.column_order)
         self._refresh_listbox()
         self._refresh_formula_listbox()
@@ -186,6 +194,11 @@ class ColumnsManagerFrame(ttk.Frame):
     def _selected_index(self) -> Optional[int]:
         sel = self.listbox.curselection()
         return sel[0] if sel else None
+
+    def _on_duplicate_column_selected(self):
+        if self.duplicate_column_var.get():
+            self.remove_duplicates_var.set(True)
+        self._changed()
 
     @staticmethod
     def _series_or_number(df: pd.DataFrame, token: str):
@@ -378,11 +391,6 @@ class ColumnsManagerFrame(ttk.Frame):
         if df is None or df.empty:
             return df
 
-        if self.remove_duplicates_var.get():
-            col = self.duplicate_column_var.get()
-            if col and col in df.columns:
-                df = df.drop_duplicates(subset=[col], keep="first")
-
         for f in self.formulas:
             name = f.get("name", "").strip()
             expr = f.get("expr", "").strip()
@@ -392,6 +400,11 @@ class ColumnsManagerFrame(ttk.Frame):
                 df[name] = self._evaluate_formula_expr(df, expr)
             except Exception:
                 continue
+
+        if self.remove_duplicates_var.get():
+            col = self.duplicate_column_var.get()
+            if col and col in df.columns:
+                df = df.drop_duplicates(subset=[col], keep="first")
 
         visible_cols = [c for c in self.column_order if self.column_visible.get(c, True) and c in df.columns]
         if visible_cols:
