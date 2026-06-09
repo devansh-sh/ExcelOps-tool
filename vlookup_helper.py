@@ -143,6 +143,9 @@ def perform_vlookup(
         val_cols = []
 
     if not val_cols:
+        if not interactive:
+            messagebox.showwarning("VLOOKUP", "Lookup value columns are required to auto-run VLOOKUP.")
+            return None
         # Ask which lookup value columns to bring (allow multiple, comma separated)
         raw_vals = simpledialog.askstring(
             "VLOOKUP",
@@ -152,8 +155,9 @@ def perform_vlookup(
         if not raw_vals:
             return None
         val_cols = [c.strip() for c in raw_vals.split(",") if c.strip()]
-        if any(v not in lookup_cols for v in val_cols):
-            messagebox.showerror("VLOOKUP", "One or more selected value columns not found.")
+        missing_vals = [v for v in val_cols if v.strip().lower() not in lookup_col_map]
+        if missing_vals:
+            messagebox.showerror("VLOOKUP", f"Lookup value column(s) not found: {', '.join(missing_vals)}")
             return None
 
     normalized_main_keys = []

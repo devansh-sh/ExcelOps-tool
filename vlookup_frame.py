@@ -79,7 +79,15 @@ class VlookupFrame(ttk.Frame):
         actions = ttk.Frame(self)
         actions.pack(fill="x", **pad)
 
-        ttk.Button(actions, text="Run VLOOKUP", command=self.on_vlookup).pack(side="left", padx=4)
+        ttk.Button(actions, text="Run VLOOKUP", command=self._run_vlookup_clicked).pack(side="left", padx=4)
+
+    def _run_vlookup_clicked(self):
+        if not self.lookup_file_var.get() and callable(self.on_pick_lookup_file):
+            self.on_pick_lookup_file()
+            if not self.lookup_file_var.get():
+                return
+        if callable(self.on_vlookup):
+            self.on_vlookup()
 
     def get_config(self):
         main_keys = [self.main_keys_lb.get(i) for i in self.main_keys_lb.curselection()]

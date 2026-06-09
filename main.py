@@ -591,6 +591,18 @@ class ExcelOpsApp(tk.Tk):
                 if loaded is not None:
                     lookup_df = loaded
 
+        if interactive and lookup_df is None:
+            self.choose_lookup_file()
+            lookup_path = self.lookup_path
+            lookup_df = self.lookup_df
+            if lookup_df is None:
+                return False
+            if "vlookup" in sheet and hasattr(sheet["vlookup"], "get_config"):
+                preset_cfg = sheet["vlookup"].get_config()
+
+        if lookup_df is not None and "vlookup" in sheet and hasattr(sheet["vlookup"], "set_lookup_source"):
+            sheet["vlookup"].set_lookup_source(lookup_path or "", list(lookup_df.columns))
+
         merged = perform_vlookup(
             self,
             sheet,

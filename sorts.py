@@ -9,7 +9,7 @@ def _looks_like_date_series(s: pd.Series) -> bool:
         return False
     sample = sample.head(100)
     date_like = sample.str.contains(r"[/-]", regex=True) | sample.str.contains(
-        r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b",
+        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b",
         case=False,
         regex=True,
     )
