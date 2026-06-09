@@ -32,6 +32,7 @@ class ExcelOpsApp(tk.Tk):
         super().__init__()
         self.title("ExcelOps")
         self.geometry("1280x820")
+        self.configure(bg="#f4f6f8")
 
         self.df: pd.DataFrame | None = None
         self.preview_row_index_map: dict[str, int] = {}
@@ -45,7 +46,40 @@ class ExcelOpsApp(tk.Tk):
         self.plus_tab = None  # identifier for '+' tab
         self.preview_tab_id = None  # stores preview tab id if open
 
+        self._apply_modern_theme()
         self._build_ui()
+
+    def _apply_modern_theme(self):
+        style = ttk.Style(self)
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+        style.configure("TFrame", background="#f4f6f8")
+        style.configure("TLabelframe", background="#f4f6f8", borderwidth=1)
+        style.configure("TLabelframe.Label", background="#f4f6f8", foreground="#1f2937", font=("Arial", 10, "bold"))
+        style.configure("TLabel", background="#f4f6f8", foreground="#111827")
+        style.configure("TButton", padding=6, font=("Arial", 10))
+        style.configure("TCheckbutton", background="#f4f6f8")
+        style.configure("TCombobox", padding=3)
+
+    def _build_branding_footer(self):
+        footer = ttk.Frame(self)
+        footer.pack(side="bottom", fill="x", padx=10, pady=(0, 8))
+
+        right = ttk.Frame(footer)
+        right.pack(side="right", anchor="e")
+
+        logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "excelops_logo.png")
+        self.logo_image = None
+        if os.path.exists(logo_path):
+            try:
+                self.logo_image = tk.PhotoImage(file=logo_path)
+                ttk.Label(right, image=self.logo_image).pack(side="right", padx=(6, 0))
+            except Exception:
+                self.logo_image = None
+
+        ttk.Label(right, text="ExcelOps", font=("Arial", 12, "bold"), foreground="#0f766e").pack(side="right")
 
     def _build_ui(self):
         self._build_menu()
@@ -78,6 +112,7 @@ class ExcelOpsApp(tk.Tk):
 
         # Preview Tree (kept hidden; created when preview tab is added)
         self._create_preview_tree_holder()
+        self._build_branding_footer()
 
     def _build_menu(self):
         m = tk.Menu(self)
