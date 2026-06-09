@@ -2,6 +2,37 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
 
+
+def _looks_like_date_series(s: pd.Series) -> bool:
+    sample = s.dropna().astype(str).str.strip()
+    if sample.empty:
+        return False
+    sample = sample.head(100)
+    date_like = sample.str.contains(r"[/-]", regex=True) | sample.str.contains(
+        r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b",
+        case=False,
+        regex=True,
+    )
+    return bool(date_like.mean() >= 0.6)
+
+
+def _coerce_sort_key(s: pd.Series) -> pd.Series:
+    """Return a sort-friendly key so dates/numbers don't sort as plain text."""
+    if pd.api.types.is_datetime64_any_dtype(s):
+        return s
+
+    text = s.astype(str).str.strip()
+    if _looks_like_date_series(s):
+        parsed_dates = pd.to_datetime(text, errors="coerce", dayfirst=True)
+        if parsed_dates.notna().mean() >= 0.6:
+            return parsed_dates
+
+    numeric = pd.to_numeric(text.str.replace(",", "", regex=False), errors="coerce")
+    if numeric.notna().mean() >= 0.8:
+        return numeric
+
+    return text.str.casefold()
+
 class SortsFrame(ttk.Frame):
     """
     Multi-level sort with per-row Join (AND/OR).
@@ -208,10 +239,16 @@ class SortsFrame(ttk.Frame):
             cols = [c for c,_ in group]
             asc = [a for _,a in group]
             try:
-                out = out.sort_values(by=cols, ascending=asc, na_position="last", kind="mergesort")
+                out = out.sort_values(
+                    by=cols,
+                    ascending=asc,
+                    na_position="last",
+                    kind="mergesort",
+                    key=_coerce_sort_key,
+                )
             except Exception:
                 # fallback: ignore kind param
-                out = out.sort_values(by=cols, ascending=asc, na_position="last")
+                out = out.sort_values(by=cols, ascending=asc, na_position="last", key=_coerce_sort_key)
         return out
 
     # ---------- config ----------
