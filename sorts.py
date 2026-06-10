@@ -3,17 +3,39 @@ from tkinter import ttk, messagebox
 import pandas as pd
 
 
+_MONTH_PATTERN = (
+    r"\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|"
+    r"jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|"
+    r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b"
+)
+
+
 def _looks_like_date_series(s: pd.Series) -> bool:
-    sample = s.dropna().astype(str).str.strip()
+    sample = s.dropna().astype(str).str.replace("\u00a0", " ", regex=False).str.strip()
     if sample.empty:
         return False
     sample = sample.head(100)
     date_like = sample.str.contains(r"[/-]", regex=True) | sample.str.contains(
-        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b",
+        _MONTH_PATTERN,
         case=False,
         regex=True,
     )
     return bool(date_like.mean() >= 0.6)
+
+
+def _parse_dates_for_sort(text: pd.Series) -> pd.Series:
+    try:
+        parsed = pd.to_datetime(text, errors="coerce", dayfirst=True, format="mixed")
+    except TypeError:
+        parsed = pd.to_datetime(text, errors="coerce", dayfirst=True)
+
+    # Month-name dates such as "Monday, January 4, 1999" parse more reliably with month-first rules.
+    if parsed.notna().mean() < 0.6 and text.str.contains(_MONTH_PATTERN, case=False, regex=True).mean() >= 0.6:
+        try:
+            parsed = pd.to_datetime(text, errors="coerce", dayfirst=False, format="mixed")
+        except TypeError:
+            parsed = pd.to_datetime(text, errors="coerce", dayfirst=False)
+    return parsed
 
 
 def _coerce_sort_key(s: pd.Series) -> pd.Series:
@@ -21,9 +43,9 @@ def _coerce_sort_key(s: pd.Series) -> pd.Series:
     if pd.api.types.is_datetime64_any_dtype(s):
         return s
 
-    text = s.astype(str).str.strip()
+    text = s.astype(str).str.replace("\u00a0", " ", regex=False).str.strip()
     if _looks_like_date_series(s):
-        parsed_dates = pd.to_datetime(text, errors="coerce", dayfirst=True)
+        parsed_dates = _parse_dates_for_sort(text)
         if parsed_dates.notna().mean() >= 0.6:
             return parsed_dates
 

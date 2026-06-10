@@ -104,12 +104,13 @@ class VlookupFrame(ttk.Frame):
 
     def get_config(self):
         main_keys = self._selected(self.main_keys_lb)
-        values = self._selected(self.values_lb)
         selected_lookup_keys = self._selected(self.lookup_keys_lb)
         manual_lookup_keys = self.lookup_keys_var.get().strip()
         lookup_keys = ""
         if not self.same_keys_var.get():
             lookup_keys = ", ".join(selected_lookup_keys) if selected_lookup_keys else manual_lookup_keys
+        key_names = self._lookup_key_name_set(main_keys, lookup_keys)
+        values = [v for v in self._selected(self.values_lb) if str(v).strip().lower() not in key_names]
         return {
             "main_keys": ", ".join(main_keys),
             "lookup_keys": lookup_keys,
@@ -142,7 +143,7 @@ class VlookupFrame(ttk.Frame):
         self._refresh_listbox(self.values_lb, self.lookup_columns)
         self._auto_match_lookup_key()
         self._apply_listbox_selections()
-        self._auto_select_lookup_value()
+        self._remove_lookup_keys_from_values()
         self._toggle_lookup_keys()
 
     def _refresh_listbox(self, listbox, values):
@@ -172,13 +173,14 @@ class VlookupFrame(ttk.Frame):
         self.main_keys_var.set(", ".join(self._selected(self.main_keys_lb)))
         self._auto_match_lookup_key()
         self._apply_listbox_selections()
-        self._auto_select_lookup_value()
+        self._remove_lookup_keys_from_values()
         self._toggle_lookup_keys()
 
     def _sync_lookup_key_var(self):
         selected = self._selected(self.lookup_keys_lb)
         if selected:
             self.lookup_keys_var.set(", ".join(selected))
+        self._remove_lookup_keys_from_values()
 
     def _auto_match_lookup_key(self):
         if not self.lookup_columns:
@@ -202,17 +204,26 @@ class VlookupFrame(ttk.Frame):
             self.same_keys_var.set(False)
             self.lookup_keys_var.set(str(self.lookup_columns[0]))
 
-    def _auto_select_lookup_value(self):
-        if self.values_lb.curselection() or self.values_var.get().strip():
+    def _lookup_key_name_set(self, main_keys=None, lookup_keys_text=""):
+        if self.same_keys_var.get():
+            key_names = main_keys if main_keys is not None else self._selected(self.main_keys_lb)
+        else:
+            selected_lookup_keys = self._selected(self.lookup_keys_lb)
+            if selected_lookup_keys:
+                key_names = selected_lookup_keys
+            else:
+                text = lookup_keys_text or self.lookup_keys_var.get()
+                key_names = [c.strip() for c in text.split(",") if c.strip()]
+        return {str(c).strip().lower() for c in key_names}
+
+    def _remove_lookup_keys_from_values(self):
+        key_names = self._lookup_key_name_set()
+        if not key_names:
             return
-        selected_lookup_keys = set(self._selected(self.lookup_keys_lb))
-        if not selected_lookup_keys and self.lookup_keys_var.get().strip():
-            selected_lookup_keys = {c.strip() for c in self.lookup_keys_var.get().split(",") if c.strip()}
-        for i in range(self.values_lb.size()):
-            if self.values_lb.get(i) not in selected_lookup_keys:
-                self.values_lb.selection_set(i)
-                self.values_var.set(self.values_lb.get(i))
-                break
+        kept_values = [v for v in self._selected(self.values_lb) if str(v).strip().lower() not in key_names]
+        self.values_lb.selection_clear(0, "end")
+        self._select_values(self.values_lb, kept_values)
+        self.values_var.set(", ".join(kept_values))
 
     def _toggle_lookup_keys(self):
         state = "disabled" if self.same_keys_var.get() else "normal"
