@@ -200,7 +200,10 @@ def perform_vlookup(
     for key in keys_lookup:
         normalized = lookup_col_map.get(key.strip().lower())
         if not normalized:
-            messagebox.showerror("VLOOKUP", f"Lookup key not found: {key}")
+            messagebox.showerror(
+                "VLOOKUP",
+                f"Lookup key not found: {key}\nAvailable lookup columns: {', '.join(lookup_cols)}"
+            )
             return None
         normalized_lookup_keys.append(normalized)
 
