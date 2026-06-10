@@ -35,6 +35,8 @@ class ExcelOpsApp(tk.Tk):
         self.configure(bg="#f4f6f8")
 
         self.df: pd.DataFrame | None = None
+        self.datasets: dict[str, pd.DataFrame] = {}
+        self.active_dataset_name: str | None = None
         self.preview_row_index_map: dict[str, int] = {}
         self.preview_deletable = False
         self._last_csv_sep: str | None = None
@@ -86,6 +88,11 @@ class ExcelOpsApp(tk.Tk):
 
         top = ttk.Frame(self)
         top.pack(side="top", fill="x", padx=8, pady=(6, 0))
+        ttk.Label(top, text="File:").pack(side="left")
+        self.dataset_selector = ttk.Combobox(top, state="readonly", width=30, values=[])
+        self.dataset_selector.pack(side="left", padx=(6, 12))
+        self.dataset_selector.bind("<<ComboboxSelected>>", self._on_dataset_selected)
+
         ttk.Label(top, text="Preview:").pack(side="left")
         self.preview_selector = ttk.Combobox(top, state="readonly", width=40, values=[])
         self.preview_selector.pack(side="left", padx=6)
@@ -226,42 +233,204 @@ class ExcelOpsApp(tk.Tk):
 
     # ---------------- File ops ----------------
     def load_file(self):
-        path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls"), ("CSV files", "*.csv")])
-        if not path:
-            return
-        try:
-            if path.lower().endswith(".csv"):
-                self.df = self._read_csv_safely(path)
-            else:
-                self.df = pd.read_excel(path)
-            self.df = self.df.reset_index(drop=True)
-        except Exception as e:
-            messagebox.showerror("Load error", str(e))
+        load_many = messagebox.askyesno(
+            "Load files",
+            "Do you want to upload more than one file?\n\n"
+            "Choose Yes to select multiple Excel/CSV files, or No to select one file.",
+        )
+        filetypes = [("Excel/CSV files", "*.xlsx *.xls *.csv"), ("Excel files", "*.xlsx *.xls"), ("CSV files", "*.csv")]
+        if load_many:
+            paths = filedialog.askopenfilenames(filetypes=filetypes)
+        else:
+            path = filedialog.askopenfilename(filetypes=filetypes)
+            paths = (path,) if path else ()
+        if not paths:
             return
 
-        # remove all tabs
+        loaded: dict[str, pd.DataFrame] = {}
+        errors = []
+        for path in paths:
+            try:
+                df = self._read_data_file(path).reset_index(drop=True)
+                loaded[self._unique_dataset_name(os.path.basename(path), loaded)] = df
+            except Exception as e:
+                errors.append(f"{os.path.basename(path)}: {e}")
+
+        if not loaded:
+            messagebox.showerror("Load error", "No files could be loaded.\n\n" + "\n".join(errors))
+            return
+
+        self.datasets = loaded
+        self.active_dataset_name = next(iter(self.datasets))
+        self.df = self.datasets[self.active_dataset_name]
+        self._reset_workspace_for_dataset()
+        self._refresh_dataset_selector()
+
+        loaded_msg = "\n".join(f"• {name}: {len(df)} rows, {len(df.columns)} columns" for name, df in self.datasets.items())
+        if errors:
+            loaded_msg += "\n\nSome files were skipped:\n" + "\n".join(errors)
+        messagebox.showinfo("Loaded", f"Loaded {len(self.datasets)} file(s):\n\n{loaded_msg}")
+
+    def _read_data_file(self, path: str) -> pd.DataFrame:
+        if path.lower().endswith(".csv"):
+            return self._read_csv_safely(path)
+        return pd.read_excel(path)
+
+    def _unique_dataset_name(self, name: str, loaded: dict[str, pd.DataFrame]) -> str:
+        existing = set(self.datasets) | set(loaded)
+        if name not in existing:
+            return name
+        stem, ext = os.path.splitext(name)
+        i = 2
+        while True:
+            candidate = f"{stem} ({i}){ext}"
+            if candidate not in existing:
+                return candidate
+            i += 1
+
+    def _reset_workspace_for_dataset(self):
         for t in list(self.nb.tabs()):
             self.nb.forget(t)
         self.sheets.clear()
         self.plus_tab = None
         self.preview_tab_id = None
-
-        # add one starter sheet and a '+' tab
+        self.preview_row_index_map = {}
         self.add_sheet("Sheet1")
-
-        # Ensure filters frames have the source DF for their dropdowns
-        for s in self.sheets:
-            try:
-                if hasattr(s["filters"], "refresh_source_df"):
-                    s["filters"].refresh_source_df(self.df)
-            except Exception:
-                pass
-
         self._refresh_filters_after_data_change()
-
         self._ensure_plus_tab()
         self._refresh_preview_selector()
-        messagebox.showinfo("Loaded", f"Loaded {os.path.basename(path)} with {len(self.df)} rows, {len(self.df.columns)} columns.")
+
+    def _refresh_dataset_selector(self):
+        names = list(self.datasets)
+        self.dataset_selector["values"] = names
+        self.dataset_selector.set(self.active_dataset_name or "")
+
+    def _on_dataset_selected(self, event=None):
+        name = self.dataset_selector.get()
+        if not name or name == self.active_dataset_name or name not in self.datasets:
+            return
+        if self.active_dataset_name and self.df is not None:
+            self.datasets[self.active_dataset_name] = self.df.reset_index(drop=True)
+        self.active_dataset_name = name
+        self.df = self.datasets[name].reset_index(drop=True)
+        self.datasets[name] = self.df
+        self._refresh_filters_after_data_change()
+        self._refresh_preview_selector()
+        self.update_preview()
+
+    def _read_csv_safely(self, path: str) -> pd.DataFrame:
+        sample_lines = []
+        encodings = ("utf-8-sig", "utf-8", "latin-1")
+        for encoding in encodings:
+            try:
+                with open(path, "r", encoding=encoding, errors="replace") as handle:
+                    for _ in range(30):
+                        line = handle.readline()
+                        if not line:
+                            break
+                        if line.strip():
+                            sample_lines.append(line)
+                if sample_lines:
+                    break
+            except Exception:
+                continue
+        if not sample_lines:
+            return pd.read_csv(path)
+        sep = self._detect_csv_delimiter(sample_lines)
+        self._last_csv_sep = sep
+        for encoding in encodings:
+            try:
+                df = pd.read_csv(
+                    path,
+                    sep=sep,
+                    engine="python",
+                    encoding=encoding,
+                    index_col=False
+                )
+                self._last_csv_encoding = encoding
+                break
+            except Exception:
+                df = None
+        if df is None:
+            df = pd.read_csv(path, index_col=False)
+            self._last_csv_encoding = None
+        if len(df.columns) == 1:
+            df = self._retry_common_delimiters(path, encodings, df)
+        return df
+
+    def _retry_common_delimiters(
+        self,
+        path: str,
+        encodings: tuple[str, ...],
+        fallback_df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        best_df = fallback_df
+        best_cols = len(fallback_df.columns)
+        for delim in (",", ";", "\t", "|"):
+            for encoding in encodings:
+                try:
+                    candidate = pd.read_csv(
+                        path,
+                        sep=delim,
+                        engine="python",
+                        encoding=encoding,
+                        index_col=False
+                    )
+                except Exception:
+                    continue
+                if len(candidate.columns) > best_cols:
+                    best_df = candidate
+                    best_cols = len(candidate.columns)
+                    self._last_csv_sep = delim
+                    self._last_csv_encoding = encoding
+        return best_df
+
+    def _detect_csv_delimiter(self, sample_lines: list[str]) -> str | None:
+        import csv
+        candidates = [",", ";", "\t", "|"]
+        header_line = sample_lines[0] if sample_lines else ""
+        header_counts = {d: header_line.count(d) for d in candidates}
+        if header_counts:
+            best_header = max(header_counts, key=header_counts.get)
+            if header_counts[best_header] > 0:
+                return best_header
+        best = (None, 1, float("inf"))
+        for delim in candidates:
+            try:
+                reader = csv.reader(sample_lines, delimiter=delim)
+                counts = [len(row) for row in reader if row]
+            except Exception:
+                continue
+            if not counts:
+                continue
+            counts.sort()
+            median = counts[len(counts) // 2]
+            variance = sum((c - median) ** 2 for c in counts) / len(counts)
+            if median > best[1] or (median == best[1] and variance < best[2]):
+                best = (delim, median, variance)
+        return None if best[0] is None or best[1] <= 1 else best[0]
+
+
+    def _read_csv_with_prompt(self, path: str, df: pd.DataFrame) -> pd.DataFrame:
+        hint = str(df.columns[0])
+        delimiter = simpledialog.askstring(
+            "CSV Delimiter",
+            "Auto-detected a single-column CSV.\n"
+            "Enter the delimiter to use (examples: , ; \\t |):",
+            initialvalue="," if "," in hint else ";" if ";" in hint else "\\t" if "\t" in hint else "|",
+            parent=self
+        )
+        if delimiter is None:
+            return df
+        delimiter = delimiter.strip()
+        if delimiter == "\\t":
+            delimiter = "\t"
+        if not delimiter:
+            return df
+        try:
+            return pd.read_csv(path, sep=delimiter, engine="python")
+        except Exception:
+            return df
 
     def _read_csv_safely(self, path: str) -> pd.DataFrame:
         sample_lines = []
@@ -615,6 +784,8 @@ class ExcelOpsApp(tk.Tk):
             return False
 
         self.df = merged.reset_index(drop=True)
+        if self.active_dataset_name:
+            self.datasets[self.active_dataset_name] = self.df
         self.lookup_path = lookup_path
         self.lookup_df = lookup_df
         self._refresh_filters_after_data_change()
@@ -852,6 +1023,8 @@ class ExcelOpsApp(tk.Tk):
             return
         self.df = self.df.drop(index=indices, errors="ignore")
         self.df = self.df.reset_index(drop=True)
+        if self.active_dataset_name:
+            self.datasets[self.active_dataset_name] = self.df
         self._refresh_filters_after_data_change()
         self.update_preview()
 
