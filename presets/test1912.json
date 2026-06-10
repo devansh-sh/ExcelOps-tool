@@ -1,0 +1,41 @@
+{
+  "version": 2,
+  "sheets": [
+    {
+      "name": "Sheet1",
+      "filters": {
+        "filters": [
+          [
+            "",
+            "User",
+            "==",
+            "2009-T44"
+          ]
+        ]
+      },
+      "sorts": {
+        "sorts": []
+      },
+      "columns": {
+        "selected_order": [
+          "User",
+          "Symbol",
+          "B/S",
+          "Activity",
+          "Price",
+          "Volume",
+          "Exchange",
+          "Time"
+        ],
+        "hidden": []
+      },
+      "pivot": {
+        "rows": [],
+        "columns": [],
+        "value": "",
+        "agg": "sum",
+        "generated": false
+      }
+    }
+  ]
+}
