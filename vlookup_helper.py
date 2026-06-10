@@ -34,6 +34,37 @@ def _find_duplicate_columns(df: pd.DataFrame):
     return dupes
 
 
+
+def _normalize_key_series(s: pd.Series) -> pd.Series:
+    """Normalize VLOOKUP keys so Excel/CSV type differences still match."""
+    if pd.api.types.is_datetime64_any_dtype(s):
+        return pd.to_datetime(s, errors="coerce").dt.strftime("%Y-%m-%d").fillna("")
+
+    text = (
+        s.astype(str)
+        .str.replace("\u00a0", " ", regex=False)
+        .str.strip()
+        .str.replace(r"\.0$", "", regex=True)
+    )
+    text = text.replace({"nan": "", "nat": "", "none": ""})
+
+    non_empty = text[text != ""]
+    if not non_empty.empty and non_empty.str.contains(r"[/-]", regex=True).mean() >= 0.6:
+        parsed_dates = pd.to_datetime(text, errors="coerce", dayfirst=True)
+        if parsed_dates.notna().mean() >= 0.6:
+            return parsed_dates.dt.strftime("%Y-%m-%d").fillna("")
+
+    return text.str.casefold()
+
+
+def _read_lookup_file(app, lookup_path: str) -> pd.DataFrame:
+    if lookup_path.lower().endswith(".csv") and hasattr(app, "_read_csv_safely"):
+        return app._read_csv_safely(lookup_path)
+    if lookup_path.lower().endswith(".csv"):
+        return pd.read_csv(lookup_path)
+    return pd.read_excel(lookup_path)
+
+
 def _ask_choice(prompt: str, options: list[str], parent=None) -> str | None:
     """Simple helper that asks user for a string; validates it is in options."""
     if not options:
@@ -95,10 +126,7 @@ def perform_vlookup(
 
         # Load lookup DataFrame
         try:
-            if lookup_path.lower().endswith(".csv"):
-                lookup_df = pd.read_csv(lookup_path)
-            else:
-                lookup_df = pd.read_excel(lookup_path)
+            lookup_df = _read_lookup_file(app, lookup_path)
         except Exception as e:
             messagebox.showerror("VLOOKUP", f"Failed to load lookup file:\n{e}")
             return None
@@ -216,7 +244,7 @@ def perform_vlookup(
             return None
         default_fill = default_fill if default_fill != "" else None
 
-    # Prepare for merge: dedupe selections and exclude key columns from value fetch.
+    # Prepare for merge: normalize join keys and exclude key columns from value fetch.
     try:
         left_on = _dedupe_keep_order(normalized_main_keys)
         right_on = _dedupe_keep_order(normalized_lookup_keys)
@@ -224,12 +252,25 @@ def perform_vlookup(
         key_set = set(right_on)
         lookup_value_cols = _dedupe_keep_order([c for c in normalized_values if c not in key_set])
 
-        merge_cols = _dedupe_keep_order(right_on + lookup_value_cols)
-        lookup_sub = lookup_df.loc[:, merge_cols].copy()
+        main_work = main_df.copy()
+        lookup_sub = lookup_df.loc[:, _dedupe_keep_order(right_on + lookup_value_cols)].copy()
+
+        left_tmp_keys = []
+        right_tmp_keys = []
+        for i, (left_col, right_col) in enumerate(zip(left_on, right_on)):
+            left_tmp = f"__excelops_vlookup_left_key_{i}__"
+            right_tmp = f"__excelops_vlookup_right_key_{i}__"
+            main_work[left_tmp] = _normalize_key_series(main_work[left_col])
+            lookup_sub[right_tmp] = _normalize_key_series(lookup_sub[right_col])
+            left_tmp_keys.append(left_tmp)
+            right_tmp_keys.append(right_tmp)
+
+        # Excel VLOOKUP uses the first lookup hit. Prevent duplicate lookup keys from multiplying rows.
+        lookup_sub = lookup_sub.drop_duplicates(subset=right_tmp_keys, keep="first")
 
         added_cols = []
         rename_map = {}
-        reserved = set(str(c) for c in main_df.columns)
+        reserved = set(str(c) for c in main_work.columns)
         for col in lookup_value_cols:
             base_name = f"{prefix}{col}" if prefix else col
             new_name = base_name
@@ -244,11 +285,16 @@ def perform_vlookup(
         if rename_map:
             lookup_sub.rename(columns=rename_map, inplace=True)
 
-        merged = main_df.merge(lookup_sub, how="left", left_on=left_on, right_on=right_on, suffixes=("", "_lk"))
+        merge_cols = right_tmp_keys + added_cols
+        merged = main_work.merge(
+            lookup_sub.loc[:, merge_cols],
+            how="left",
+            left_on=left_tmp_keys,
+            right_on=right_tmp_keys,
+            suffixes=("", "_lk"),
+        )
 
-        for rk, lk in zip(right_on, left_on):
-            if rk != lk and rk in merged.columns:
-                merged.drop(columns=[rk], inplace=True)
+        merged.drop(columns=left_tmp_keys + right_tmp_keys, inplace=True, errors="ignore")
 
         if default_fill is not None:
             for col in added_cols:
