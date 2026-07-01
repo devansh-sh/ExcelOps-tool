@@ -57,19 +57,77 @@ class ExcelOpsApp(tk.Tk):
             style.theme_use("clam")
         except Exception:
             pass
-        style.configure("TFrame", background="#f4f6f8")
-        style.configure("TLabelframe", background="#f4f6f8", borderwidth=1)
-        style.configure("TLabelframe.Label", background="#f4f6f8", foreground="#1f2937", font=("Arial", 10, "bold"))
-        style.configure("TLabel", background="#f4f6f8", foreground="#111827")
-        style.configure("TButton", padding=6, font=("Arial", 10))
-        style.configure("TCheckbutton", background="#f4f6f8")
-        style.configure("TCombobox", padding=3)
+        self.ui_bg = "#eef2f7"
+        self.card_bg = "#ffffff"
+        self.accent = "#6b7f2a"
+        self.accent_dark = "#26311f"
+        self.muted = "#64748b"
+        self.configure(bg=self.ui_bg)
+
+        style.configure("TFrame", background=self.ui_bg)
+        style.configure("Card.TFrame", background=self.card_bg)
+        style.configure("Toolbar.TFrame", background=self.card_bg)
+        style.configure("Footer.TFrame", background=self.ui_bg)
+        style.configure("TLabelframe", background=self.card_bg, borderwidth=1, relief="solid")
+        style.configure(
+            "TLabelframe.Label",
+            background=self.card_bg,
+            foreground="#1f2937",
+            font=("Arial", 10, "bold"),
+        )
+        style.configure("TLabel", background=self.ui_bg, foreground="#111827", font=("Arial", 10))
+        style.configure("Card.TLabel", background=self.card_bg, foreground="#111827", font=("Arial", 10))
+        style.configure("Muted.TLabel", background=self.ui_bg, foreground=self.muted, font=("Arial", 9))
+        style.configure(
+            "Brand.TLabel",
+            background=self.ui_bg,
+            foreground=self.accent_dark,
+            font=("Arial", 14, "bold"),
+        )
+        style.configure(
+            "BrandCard.TLabel",
+            background=self.card_bg,
+            foreground=self.accent_dark,
+            font=("Arial", 15, "bold"),
+        )
+        style.configure("TButton", padding=(12, 7), font=("Arial", 10), borderwidth=0)
+        style.map("TButton", background=[("active", "#dbe7c2")])
+        style.configure("Accent.TButton", padding=(14, 7), font=("Arial", 10, "bold"))
+        style.configure("TCheckbutton", background=self.ui_bg, foreground="#111827")
+        style.configure("Card.TCheckbutton", background=self.card_bg, foreground="#111827")
+        style.configure("TCombobox", padding=5)
+        style.configure("TNotebook", background=self.ui_bg, borderwidth=0)
+        style.configure("TNotebook.Tab", padding=(14, 8), font=("Arial", 10, "bold"))
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", self.card_bg), ("active", "#e6eddb")],
+            foreground=[("selected", self.accent_dark), ("active", self.accent_dark)],
+        )
+        style.configure(
+            "Treeview",
+            rowheight=26,
+            fieldbackground=self.card_bg,
+            background=self.card_bg,
+            foreground="#111827",
+        )
+        style.configure(
+            "Treeview.Heading",
+            font=("Arial", 10, "bold"),
+            background="#e8eed9",
+            foreground=self.accent_dark,
+        )
 
     def _build_branding_footer(self):
-        footer = ttk.Frame(self)
-        footer.pack(side="bottom", fill="x", padx=10, pady=(0, 8))
+        footer = ttk.Frame(self, style="Footer.TFrame")
+        footer.pack(side="bottom", fill="x", padx=14, pady=(0, 10))
 
-        right = ttk.Frame(footer)
+        ttk.Label(
+            footer,
+            text="Spreadsheet analysis made simple",
+            style="Muted.TLabel",
+        ).pack(side="left", anchor="w")
+
+        right = ttk.Frame(footer, style="Footer.TFrame")
         right.pack(side="right", anchor="e")
 
         logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "excelops_logo.png")
@@ -81,19 +139,59 @@ class ExcelOpsApp(tk.Tk):
             except Exception:
                 self.logo_image = None
 
-        ttk.Label(right, text="ExcelOps", font=("Arial", 12, "bold"), foreground="#0f766e").pack(side="right")
+        if self.logo_image is None:
+            self._draw_footer_logo(right).pack(side="right", padx=(10, 0))
+
+        text_wrap = ttk.Frame(right, style="Footer.TFrame")
+        text_wrap.pack(side="right", anchor="e")
+        ttk.Label(text_wrap, text="ExcelOps", style="Brand.TLabel").pack(anchor="e")
+        ttk.Label(
+            text_wrap,
+            text="powered by BDS",
+            style="Muted.TLabel",
+        ).pack(anchor="e")
+
+    def _draw_footer_logo(self, parent):
+        logo = tk.Canvas(
+            parent,
+            width=82,
+            height=54,
+            bg=self.ui_bg,
+            highlightthickness=0,
+            bd=0,
+        )
+
+        bar_color = "#b7c56b"
+        leaf_color = self.accent_dark
+        logo.create_rectangle(8, 31, 20, 44, fill=bar_color, outline=bar_color)
+        logo.create_rectangle(28, 21, 40, 44, fill=bar_color, outline=bar_color)
+        logo.create_rectangle(48, 9, 60, 44, fill=bar_color, outline=bar_color)
+
+        leaf_shapes = [
+            (54, 2, 48, 17, 54, 24, 60, 17),
+            (42, 8, 34, 17, 42, 24, 48, 17),
+            (66, 8, 60, 17, 66, 24, 76, 17),
+            (30, 22, 18, 27, 30, 32, 42, 27),
+            (68, 22, 56, 27, 68, 32, 80, 27),
+        ]
+        for points in leaf_shapes:
+            logo.create_polygon(points, fill=leaf_color, outline=leaf_color, smooth=True)
+
+        logo.create_text(42, 50, text="BDS", fill=leaf_color, font=("Arial", 13, "bold"))
+        return logo
 
     def _build_ui(self):
         self._build_menu()
 
-        top = ttk.Frame(self)
-        top.pack(side="top", fill="x", padx=8, pady=(6, 0))
-        ttk.Label(top, text="File:").pack(side="left")
+        top = ttk.Frame(self, style="Toolbar.TFrame")
+        top.pack(side="top", fill="x", padx=12, pady=(10, 6), ipady=6)
+        ttk.Label(top, text="ExcelOps", style="BrandCard.TLabel").pack(side="left", padx=(12, 16))
+        ttk.Label(top, text="File:", style="Card.TLabel").pack(side="left", padx=(10, 0))
         self.dataset_selector = ttk.Combobox(top, state="readonly", width=30, values=[])
         self.dataset_selector.pack(side="left", padx=(6, 12))
         self.dataset_selector.bind("<<ComboboxSelected>>", self._on_dataset_selected)
 
-        ttk.Label(top, text="Preview:").pack(side="left")
+        ttk.Label(top, text="Preview:", style="Card.TLabel").pack(side="left")
         self.preview_selector = ttk.Combobox(top, state="readonly", width=40, values=[])
         self.preview_selector.pack(side="left", padx=6)
         self.preview_selector.bind("<<ComboboxSelected>>", lambda e: self.update_preview())
@@ -101,11 +199,17 @@ class ExcelOpsApp(tk.Tk):
         ttk.Button(top, text="Delete Selected Rows", command=self.delete_selected_rows).pack(side="left", padx=6)
 
         self.show_all_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(top, text="Show full", variable=self.show_all_var, command=self.update_preview).pack(side="right")
+        ttk.Checkbutton(
+            top,
+            text="Show full",
+            variable=self.show_all_var,
+            command=self.update_preview,
+            style="Card.TCheckbutton",
+        ).pack(side="right", padx=(0, 10))
 
         # vertical paned window: top preview tree removed (preview is in separate tab now)
-        bottom = ttk.Frame(self)
-        bottom.pack(fill="both", expand=True, padx=6, pady=6)
+        bottom = ttk.Frame(self, style="Card.TFrame")
+        bottom.pack(fill="both", expand=True, padx=12, pady=8)
 
         # Notebook: sheet tabs (with '+' tab)
         self.nb = ttk.Notebook(bottom)
