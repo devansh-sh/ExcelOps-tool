@@ -697,13 +697,13 @@ class ExcelOpsApp(tk.Tk):
     def _build_vlookup_frame(self, parent):
         return VlookupFrame(parent, self.apply_vlookup, self.choose_lookup_file)
 
-    def choose_lookup_file(self):
+    def _prompt_lookup_file(self, title="Select lookup file (Excel or CSV)"):
         path = filedialog.askopenfilename(
-            title="Select lookup file (Excel or CSV)",
+            title=title,
             filetypes=[("Excel/CSV", "*.xlsx *.xls *.csv")],
         )
         if not path:
-            return
+            return None, None
         try:
             if path.lower().endswith(".csv"):
                 lookup_df = self._read_csv_safely(path)
@@ -711,6 +711,12 @@ class ExcelOpsApp(tk.Tk):
                 lookup_df = pd.read_excel(path)
         except Exception as e:
             messagebox.showerror("Lookup load error", str(e))
+            return None, None
+        return path, lookup_df
+
+    def choose_lookup_file(self):
+        path, lookup_df = self._prompt_lookup_file()
+        if lookup_df is None:
             return
 
         self.lookup_path = path
@@ -731,15 +737,27 @@ class ExcelOpsApp(tk.Tk):
         except Exception:
             return None
 
-    def _run_vlookup_for_sheet(self, sheet, interactive=True):
-        preset_cfg = {}
-        if "vlookup" in sheet and hasattr(sheet["vlookup"], "get_config"):
+    def _run_vlookup_for_sheet(
+        self,
+        sheet,
+        interactive=True,
+        preset_override=None,
+        prompt_for_file=False,
+        record_history=True,
+    ):
+        preset_cfg = preset_override or {}
+        if not preset_override and "vlookup" in sheet and hasattr(sheet["vlookup"], "get_config"):
             preset_cfg = sheet["vlookup"].get_config()
 
         lookup_path = self.lookup_path
         lookup_df = self.lookup_df
         preset_lookup_path = (preset_cfg or {}).get("lookup_file", "").strip()
-        if preset_lookup_path:
+        if prompt_for_file:
+            label = os.path.basename(preset_lookup_path) if preset_lookup_path else "lookup file"
+            lookup_path, lookup_df = self._prompt_lookup_file(f"Select lookup file for saved VLOOKUP ({label})")
+            if lookup_df is None:
+                return False
+        elif preset_lookup_path:
             if lookup_path != preset_lookup_path:
                 loaded = self._load_lookup_file_for_path(preset_lookup_path)
                 if loaded is not None:
@@ -761,7 +779,11 @@ class ExcelOpsApp(tk.Tk):
 
         if lookup_df is not None and "vlookup" in sheet and hasattr(sheet["vlookup"], "set_lookup_source"):
             sheet["vlookup"].set_lookup_source(lookup_path or "", list(lookup_df.columns))
-            preset_cfg = sheet["vlookup"].get_config()
+            if not preset_override:
+                preset_cfg = sheet["vlookup"].get_config()
+            else:
+                preset_cfg = dict(preset_cfg)
+                preset_cfg["lookup_file"] = lookup_path or preset_cfg.get("lookup_file", "")
 
         merged = perform_vlookup(
             self,
@@ -779,6 +801,8 @@ class ExcelOpsApp(tk.Tk):
             self.datasets[self.active_dataset_name] = self.df
         self.lookup_path = lookup_path
         self.lookup_df = lookup_df
+        if record_history and "vlookup" in sheet and hasattr(sheet["vlookup"], "add_run_config"):
+            sheet["vlookup"].add_run_config(preset_cfg)
         self._refresh_filters_after_data_change()
         self.update_preview()
         return True

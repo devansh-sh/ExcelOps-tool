@@ -173,14 +173,34 @@ class PresetManager:
             except Exception:
                 pass
 
-            # auto-run VLOOKUP on preset load if configuration is present
+            # Re-run saved VLOOKUP steps from the preset. Always ask for the lookup
+            # files so presets remain portable across machines and folders.
             try:
                 vlookup_cfg = sheet_cfg.get("vlookup", {})
-                has_keys = bool((vlookup_cfg.get("main_keys", "") or "").strip())
-                has_values = bool((vlookup_cfg.get("values", "") or "").strip())
-                has_lookup_file = bool((vlookup_cfg.get("lookup_file", "") or "").strip())
-                if has_keys and has_values and has_lookup_file and hasattr(app, "_run_vlookup_for_sheet"):
-                    app._run_vlookup_for_sheet(s, interactive=False)
+                runs = list(vlookup_cfg.get("runs", []))
+                if not runs:
+                    has_keys = bool((vlookup_cfg.get("main_keys", "") or "").strip())
+                    has_values = bool((vlookup_cfg.get("values", "") or "").strip())
+                    if has_keys and has_values:
+                        runs = [vlookup_cfg]
+                if runs and hasattr(app, "_run_vlookup_for_sheet"):
+                    should_run = messagebox.askyesno(
+                        "Run VLOOKUP preset?",
+                        (
+                            f"Preset sheet '{s['name']}' contains {len(runs)} saved VLOOKUP step(s).\n\n"
+                            "Do you want to select the lookup file(s) and run them now?"
+                        ),
+                    )
+                    if should_run:
+                        for run_cfg in runs:
+                            if not app._run_vlookup_for_sheet(
+                                s,
+                                interactive=False,
+                                preset_override=run_cfg,
+                                prompt_for_file=True,
+                                record_history=False,
+                            ):
+                                break
             except Exception:
                 pass
 

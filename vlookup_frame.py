@@ -16,6 +16,8 @@ class VlookupFrame(ttk.Frame):
         self.default_fill_var = tk.StringVar()
         self.lookup_file_var = tk.StringVar()
         self.same_keys_var = tk.BooleanVar(value=True)
+        self.vlookup_runs = []
+        self.runs_count_var = tk.StringVar(value="Saved VLOOKUP steps: 0")
         self._build_ui()
 
     def _build_ui(self):
@@ -87,6 +89,7 @@ class VlookupFrame(ttk.Frame):
             text="Choose Lookup File",
             command=self.on_pick_lookup_file if callable(self.on_pick_lookup_file) else None,
         ).pack(side="left")
+        ttk.Label(lookup_picker, textvariable=self.runs_count_var).pack(side="left", padx=(12, 0))
 
         actions = ttk.Frame(self)
         actions.pack(fill="x", **pad)
@@ -118,18 +121,57 @@ class VlookupFrame(ttk.Frame):
             "prefix": self.prefix_var.get(),
             "default_fill": self.default_fill_var.get(),
             "lookup_file": self.lookup_file_var.get(),
+            "runs": list(self.vlookup_runs),
         }
 
     def load_config(self, cfg: dict):
-        self.main_keys_var.set(cfg.get("main_keys", ""))
-        self.lookup_keys_var.set(cfg.get("lookup_keys", ""))
-        self.values_var.set(cfg.get("values", ""))
-        self.prefix_var.set(cfg.get("prefix", ""))
-        self.default_fill_var.set(cfg.get("default_fill", ""))
-        self.lookup_file_var.set(cfg.get("lookup_file", ""))
-        self.same_keys_var.set(cfg.get("lookup_keys", "") == "")
+        self.vlookup_runs = list(cfg.get("runs", []))
+        if not self.vlookup_runs and self._has_vlookup_fields(cfg):
+            self.vlookup_runs = [self._snapshot_from_config(cfg)]
+        display_cfg = dict(cfg)
+        if self.vlookup_runs and not self._has_vlookup_fields(display_cfg):
+            display_cfg.update(self.vlookup_runs[-1])
+        self._refresh_runs_count()
+
+        self.main_keys_var.set(display_cfg.get("main_keys", ""))
+        self.lookup_keys_var.set(display_cfg.get("lookup_keys", ""))
+        self.values_var.set(display_cfg.get("values", ""))
+        self.prefix_var.set(display_cfg.get("prefix", ""))
+        self.default_fill_var.set(display_cfg.get("default_fill", ""))
+        self.lookup_file_var.set(display_cfg.get("lookup_file", ""))
+        self.same_keys_var.set(display_cfg.get("lookup_keys", "") == "")
         self._apply_listbox_selections()
         self._toggle_lookup_keys()
+
+    def add_run_config(self, cfg: dict):
+        run = self._snapshot_from_config(cfg)
+        if not self._has_vlookup_fields(run):
+            return
+        if run not in self.vlookup_runs:
+            self.vlookup_runs.append(run)
+            self._refresh_runs_count()
+
+    def get_saved_runs(self):
+        return list(self.vlookup_runs)
+
+    def _snapshot_from_config(self, cfg: dict):
+        return {
+            "main_keys": cfg.get("main_keys", ""),
+            "lookup_keys": cfg.get("lookup_keys", ""),
+            "values": cfg.get("values", ""),
+            "prefix": cfg.get("prefix", ""),
+            "default_fill": cfg.get("default_fill", ""),
+            "lookup_file": cfg.get("lookup_file", ""),
+        }
+
+    def _has_vlookup_fields(self, cfg: dict):
+        return bool(
+            (cfg.get("main_keys", "") or "").strip()
+            and (cfg.get("values", "") or "").strip()
+        )
+
+    def _refresh_runs_count(self):
+        self.runs_count_var.set(f"Saved VLOOKUP steps: {len(self.vlookup_runs)}")
 
     def set_columns(self, columns):
         self.columns = columns or []
