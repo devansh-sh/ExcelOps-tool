@@ -95,6 +95,13 @@ class VlookupFrame(ttk.Frame):
         actions.pack(fill="x", **pad)
 
         ttk.Button(actions, text="Run VLOOKUP", command=self._run_vlookup_clicked).pack(side="left", padx=4)
+        ttk.Button(actions, text="Save Current VLOOKUP Step", command=self.save_current_step).pack(side="left", padx=4)
+        ttk.Button(actions, text="Clear Saved VLOOKUP Steps", command=self.clear_saved_steps).pack(side="left", padx=4)
+
+        saved_box = ttk.LabelFrame(self, text="Saved VLOOKUP Steps Included in Presets")
+        saved_box.pack(fill="x", padx=6, pady=(0, 6))
+        self.runs_lb = tk.Listbox(saved_box, height=3, exportselection=False)
+        self.runs_lb.pack(fill="x", padx=6, pady=6)
         self._toggle_lookup_keys()
 
     def _run_vlookup_clicked(self):
@@ -114,15 +121,20 @@ class VlookupFrame(ttk.Frame):
             lookup_keys = ", ".join(selected_lookup_keys) if selected_lookup_keys else manual_lookup_keys
         key_names = self._lookup_key_name_set(main_keys, lookup_keys)
         values = [v for v in self._selected(self.values_lb) if str(v).strip().lower() not in key_names]
-        return {
+        current = {
             "main_keys": ", ".join(main_keys),
             "lookup_keys": lookup_keys,
             "values": ", ".join(values),
             "prefix": self.prefix_var.get(),
             "default_fill": self.default_fill_var.get(),
             "lookup_file": self.lookup_file_var.get(),
-            "runs": list(self.vlookup_runs),
         }
+        runs = list(self.vlookup_runs)
+        current_run = self._snapshot_from_config(current)
+        if self._has_vlookup_fields(current_run) and current_run not in runs:
+            runs.append(current_run)
+        current["runs"] = runs
+        return current
 
     def load_config(self, cfg: dict):
         self.vlookup_runs = list(cfg.get("runs", []))
@@ -132,6 +144,7 @@ class VlookupFrame(ttk.Frame):
         if self.vlookup_runs and not self._has_vlookup_fields(display_cfg):
             display_cfg.update(self.vlookup_runs[-1])
         self._refresh_runs_count()
+        self._refresh_runs_list()
 
         self.main_keys_var.set(display_cfg.get("main_keys", ""))
         self.lookup_keys_var.set(display_cfg.get("lookup_keys", ""))
@@ -143,6 +156,14 @@ class VlookupFrame(ttk.Frame):
         self._apply_listbox_selections()
         self._toggle_lookup_keys()
 
+    def save_current_step(self):
+        self.add_run_config(self.get_config())
+
+    def clear_saved_steps(self):
+        self.vlookup_runs = []
+        self._refresh_runs_count()
+        self._refresh_runs_list()
+
     def add_run_config(self, cfg: dict):
         run = self._snapshot_from_config(cfg)
         if not self._has_vlookup_fields(run):
@@ -150,6 +171,7 @@ class VlookupFrame(ttk.Frame):
         if run not in self.vlookup_runs:
             self.vlookup_runs.append(run)
             self._refresh_runs_count()
+            self._refresh_runs_list()
 
     def get_saved_runs(self):
         return list(self.vlookup_runs)
@@ -172,6 +194,18 @@ class VlookupFrame(ttk.Frame):
 
     def _refresh_runs_count(self):
         self.runs_count_var.set(f"Saved VLOOKUP steps: {len(self.vlookup_runs)}")
+
+    def _refresh_runs_list(self):
+        if not hasattr(self, "runs_lb"):
+            return
+        self.runs_lb.delete(0, "end")
+        for i, run in enumerate(self.vlookup_runs, start=1):
+            lookup_file = run.get("lookup_file") or "choose file on preset load"
+            self.runs_lb.insert(
+                "end",
+                f"{i}. {run.get('main_keys', '')} → {run.get('lookup_keys') or 'same key'} | "
+                f"add: {run.get('values', '')} | file: {lookup_file}",
+            )
 
     def set_columns(self, columns):
         self.columns = columns or []
