@@ -103,7 +103,10 @@ def perform_vlookup(
 
     # derive the DataFrame that will be merged into (the sheet's current result)
     try:
-        main_df = app._generate_filtered_df(sheet)
+        if hasattr(app, "_generate_base_df"):
+            main_df = app._generate_base_df(sheet)
+        else:
+            main_df = app._generate_filtered_df(sheet)
     except Exception as e:
         messagebox.showerror("VLOOKUP", f"Failed to get main sheet data: {e}")
         return None

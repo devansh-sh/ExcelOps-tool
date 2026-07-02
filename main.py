@@ -241,6 +241,7 @@ class ExcelOpsApp(tk.Tk):
         m.add_cascade(label="Presets", menu=presets_m)
         presets_m.add_command(label="Save Preset…", command=lambda: PresetManager.save(self))
         presets_m.add_command(label="Load Preset…", command=lambda: PresetManager.load(self))
+        presets_m.add_command(label="Run Preset Workflow…", command=self.run_preset_workflow)
         presets_m.add_command(label="Manage Presets…", command=lambda: PresetManager.manage(self))
 
         tools_m = tk.Menu(m, tearoff=False)
@@ -818,6 +819,125 @@ class ExcelOpsApp(tk.Tk):
         sheet = self.sheets[idx]
         self._run_vlookup_for_sheet(sheet, interactive=True)
 
+    def _apply_preset_config_to_workspace(self, cfg: dict, run_vlookups: bool = False):
+        for tab_id in list(self.nb.tabs()):
+            try:
+                self.nb.forget(tab_id)
+            except Exception:
+                pass
+        self.sheets.clear()
+        self.plus_tab = None
+        self.preview_tab_id = None
+
+        for sheet_cfg in cfg.get("sheets", []):
+            self.add_sheet(sheet_cfg.get("name", "Sheet"))
+            sheet = self.sheets[-1]
+            sheet["filters"].load_config(sheet_cfg.get("filters", {}))
+            sheet["sorts"].load_config(sheet_cfg.get("sorts", {}))
+            sheet["columns"].load_config(sheet_cfg.get("columns", {}))
+            sheet["pivot"].load_config(sheet_cfg.get("pivot", {}))
+            if "vlookup" in sheet:
+                sheet["vlookup"].load_config(sheet_cfg.get("vlookup", {}))
+
+            for key, refresh_name in (
+                ("filters", "refresh_source_df"),
+                ("columns", "refresh_source_df"),
+                ("pivot", "refresh_source_df"),
+            ):
+                try:
+                    frame = sheet[key]
+                    if hasattr(frame, refresh_name):
+                        getattr(frame, refresh_name)(self.df)
+                except Exception:
+                    pass
+
+            if run_vlookups:
+                vlookup_cfg = sheet_cfg.get("vlookup", {})
+                runs = list(vlookup_cfg.get("runs", []))
+                if not runs:
+                    has_keys = bool((vlookup_cfg.get("main_keys", "") or "").strip())
+                    has_values = bool((vlookup_cfg.get("values", "") or "").strip())
+                    if has_keys and has_values:
+                        runs = [vlookup_cfg]
+                for run_cfg in runs:
+                    if not self._run_vlookup_for_sheet(
+                        sheet,
+                        interactive=False,
+                        preset_override=run_cfg,
+                        prompt_for_file=True,
+                        record_history=False,
+                    ):
+                        break
+
+        self._ensure_plus_tab()
+        self._refresh_preview_selector()
+        self.update_preview()
+
+    def _safe_excel_sheet_name(self, name: str, used: set[str]) -> str:
+        invalid = "[]:*?/\\"
+        base = "".join("_" if ch in invalid else ch for ch in str(name or "Sheet")).strip() or "Sheet"
+        base = base[:31]
+        candidate = base
+        i = 2
+        while candidate in used:
+            suffix = f"_{i}"
+            candidate = f"{base[:31 - len(suffix)]}{suffix}"
+            i += 1
+        used.add(candidate)
+        return candidate
+
+    def _write_workbook(self, dest: str):
+        with pd.ExcelWriter(dest, engine="openpyxl") as writer:
+            used = set()
+            for sheet in self.sheets:
+                df = self._generate_filtered_df(sheet)
+                sheet_name = self._safe_excel_sheet_name(sheet["name"], used)
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+    def run_preset_workflow(self):
+        preset_name = PresetManager.prompt_select_preset(self)
+        if not preset_name:
+            return
+        try:
+            preset_cfg = PresetManager.load_preset_data(preset_name)
+        except Exception as e:
+            messagebox.showerror("Preset error", str(e))
+            return
+
+        main_path = filedialog.askopenfilename(
+            title="Select the main file to process",
+            filetypes=[("Excel/CSV files", "*.xlsx *.xls *.csv"), ("Excel files", "*.xlsx *.xls"), ("CSV files", "*.csv")],
+        )
+        if not main_path:
+            return
+        try:
+            self.df = self._read_data_file(main_path).reset_index(drop=True)
+        except Exception as e:
+            messagebox.showerror("Load error", f"Could not load main file:\n{e}")
+            return
+
+        self.datasets = {os.path.basename(main_path): self.df}
+        self.active_dataset_name = os.path.basename(main_path)
+        self._refresh_dataset_selector()
+
+        self._apply_preset_config_to_workspace(preset_cfg, run_vlookups=True)
+
+        dest = filedialog.asksaveasfilename(
+            title="Save processed workbook",
+            defaultextension=".xlsx",
+            filetypes=[("Excel files", "*.xlsx")],
+        )
+        if not dest:
+            return
+        try:
+            self._write_workbook(dest)
+            messagebox.showinfo(
+                "Workflow complete",
+                f"Processed preset '{preset_name}' and saved workbook to:\n{dest}",
+            )
+        except Exception as e:
+            messagebox.showerror("Workflow export error", str(e))
+
     # ---------------- Preview tab handling ----------------
     def open_preview_tab(self):
         # create preview tab next to '+' (at end). If exists, select it.
@@ -1005,11 +1125,7 @@ class ExcelOpsApp(tk.Tk):
         if not dest:
             return
         try:
-            with pd.ExcelWriter(dest, engine="openpyxl") as w:
-                # don't export raw by default (you asked)
-                for s in self.sheets:
-                    df = self._generate_filtered_df(s)
-                    df.to_excel(w, sheet_name=s["name"][:31], index=False)
+            self._write_workbook(dest)
             messagebox.showinfo("Exported", f"Workbook saved to {dest}")
         except Exception as e:
             messagebox.showerror("Export error", str(e))
