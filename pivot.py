@@ -36,6 +36,7 @@ class PivotFrame(ttk.Frame):
 
         self.value_col = tk.StringVar()
         self.generated = False  # pivot locked for export
+        self._pending_config = None
         self._build_ui()
 
     # ---------------- UI ----------------
@@ -59,11 +60,13 @@ class PivotFrame(ttk.Frame):
         ttk.Label(self, text="Rows").pack(anchor="w", **pad)
         self.rows_lb = tk.Listbox(self, selectmode="multiple", height=5)
         self.rows_lb.pack(fill="x", **pad)
+        self.rows_lb.bind("<<ListboxSelect>>", self._mark_user_changed)
 
         # ---- Columns ----
         ttk.Label(self, text="Columns (optional)").pack(anchor="w", **pad)
         self.cols_lb = tk.Listbox(self, selectmode="multiple", height=4)
         self.cols_lb.pack(fill="x", **pad)
+        self.cols_lb.bind("<<ListboxSelect>>", self._mark_user_changed)
 
         # ---- Values ----
         val_frame = ttk.Frame(self)
@@ -80,6 +83,7 @@ class PivotFrame(ttk.Frame):
 
         self.values_lb = tk.Listbox(val_frame, selectmode="multiple", height=6, exportselection=False)
         self.values_lb.grid(row=1, column=0, padx=(0, 16), sticky="nsew")
+        self.values_lb.bind("<<ListboxSelect>>", self._mark_user_changed)
 
         self.agg_var = tk.StringVar(value="sum")
 
@@ -125,6 +129,8 @@ class PivotFrame(ttk.Frame):
                     self.cols_lb.selection_set(i)
                 if c in selected_vals:
                     self.values_lb.selection_set(i)
+        if self._pending_config:
+            self._apply_config_to_listboxes(self._pending_config)
 
     def refresh_source_df(self, df: pd.DataFrame | None):
         self.source_df = df
@@ -132,6 +138,24 @@ class PivotFrame(ttk.Frame):
 
     def _selected(self, lb):
         return [lb.get(i) for i in lb.curselection()]
+
+    def _mark_user_changed(self, _event=None):
+        self._pending_config = None
+
+    def _apply_config_to_listboxes(self, cfg: dict):
+        cols = [] if self.source_df is None else list(self.source_df.columns)
+        self.rows_lb.selection_clear(0, "end")
+        self.cols_lb.selection_clear(0, "end")
+        self.values_lb.selection_clear(0, "end")
+        for i, c in enumerate(cols):
+            if c in cfg.get("rows", []):
+                self.rows_lb.selection_set(i)
+            if c in cfg.get("columns", []):
+                self.cols_lb.selection_set(i)
+            if c in cfg.get("values", []):
+                self.values_lb.selection_set(i)
+            if "values" not in cfg and c == cfg.get("value", ""):
+                self.values_lb.selection_set(i)
 
     # ---------------- logic ----------------
     def _build_pivot(self, df: pd.DataFrame) -> pd.DataFrame | None:
@@ -223,6 +247,7 @@ class PivotFrame(ttk.Frame):
         return out if out is not None else df
 
     def reset(self):
+        self._pending_config = None
         self.generated = False
         self.rows_lb.selection_clear(0, "end")
         self.cols_lb.selection_clear(0, "end")
@@ -241,18 +266,12 @@ class PivotFrame(ttk.Frame):
         }
 
     def load_config(self, cfg: dict):
-        self.reset()
-        cols = [] if self.source_df is None else list(self.source_df.columns)
-
-        for i, c in enumerate(cols):
-            if c in cfg.get("rows", []):
-                self.rows_lb.selection_set(i)
-            if c in cfg.get("columns", []):
-                self.cols_lb.selection_set(i)
-            if c in cfg.get("values", []):
-                self.values_lb.selection_set(i)
-            if "values" not in cfg and c == cfg.get("value", ""):
-                self.values_lb.selection_set(i)
-
+        self.generated = False
+        self.value_col.set("")
+        self.rows_lb.selection_clear(0, "end")
+        self.cols_lb.selection_clear(0, "end")
+        self.values_lb.selection_clear(0, "end")
+        self._pending_config = dict(cfg or {})
+        self._apply_config_to_listboxes(self._pending_config)
         self.agg_var.set(cfg.get("agg", "sum"))
         self.generated = cfg.get("generated", False)
