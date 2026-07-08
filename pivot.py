@@ -37,6 +37,7 @@ class PivotFrame(ttk.Frame):
         self.value_col = tk.StringVar()
         self.generated = False  # pivot locked for export
         self._pending_config = None
+        self._suspend_select_events = False
         self._build_ui()
 
     # ---------------- UI ----------------
@@ -114,21 +115,25 @@ class PivotFrame(ttk.Frame):
         selected_rows = self._selected(self.rows_lb) if keep_selection else []
         selected_cols = self._selected(self.cols_lb) if keep_selection else []
         selected_vals = self._selected(self.values_lb) if keep_selection else []
-        self.rows_lb.delete(0, "end")
-        self.cols_lb.delete(0, "end")
-        self.values_lb.delete(0, "end")
-        for c in cols:
-            self.rows_lb.insert("end", c)
-            self.cols_lb.insert("end", c)
-            self.values_lb.insert("end", c)
-        if keep_selection:
-            for i, c in enumerate(cols):
-                if c in selected_rows:
-                    self.rows_lb.selection_set(i)
-                if c in selected_cols:
-                    self.cols_lb.selection_set(i)
-                if c in selected_vals:
-                    self.values_lb.selection_set(i)
+        self._suspend_select_events = True
+        try:
+            self.rows_lb.delete(0, "end")
+            self.cols_lb.delete(0, "end")
+            self.values_lb.delete(0, "end")
+            for c in cols:
+                self.rows_lb.insert("end", c)
+                self.cols_lb.insert("end", c)
+                self.values_lb.insert("end", c)
+            if keep_selection:
+                for i, c in enumerate(cols):
+                    if c in selected_rows:
+                        self.rows_lb.selection_set(i)
+                    if c in selected_cols:
+                        self.cols_lb.selection_set(i)
+                    if c in selected_vals:
+                        self.values_lb.selection_set(i)
+        finally:
+            self._suspend_select_events = False
         if self._pending_config:
             self._apply_config_to_listboxes(self._pending_config)
 
@@ -140,25 +145,36 @@ class PivotFrame(ttk.Frame):
         return [lb.get(i) for i in lb.curselection()]
 
     def _mark_user_changed(self, _event=None):
+        if self._suspend_select_events:
+            return
         self._pending_config = None
 
     def _apply_config_to_listboxes(self, cfg: dict):
         cols = [] if self.source_df is None else list(self.source_df.columns)
-        self.rows_lb.selection_clear(0, "end")
-        self.cols_lb.selection_clear(0, "end")
-        self.values_lb.selection_clear(0, "end")
-        for i, c in enumerate(cols):
-            if c in cfg.get("rows", []):
-                self.rows_lb.selection_set(i)
-            if c in cfg.get("columns", []):
-                self.cols_lb.selection_set(i)
-            if c in cfg.get("values", []):
-                self.values_lb.selection_set(i)
-            if "values" not in cfg and c == cfg.get("value", ""):
-                self.values_lb.selection_set(i)
+        self._suspend_select_events = True
+        try:
+            self.rows_lb.selection_clear(0, "end")
+            self.cols_lb.selection_clear(0, "end")
+            self.values_lb.selection_clear(0, "end")
+            for i, c in enumerate(cols):
+                if c in cfg.get("rows", []):
+                    self.rows_lb.selection_set(i)
+                if c in cfg.get("columns", []):
+                    self.cols_lb.selection_set(i)
+                if c in cfg.get("values", []):
+                    self.values_lb.selection_set(i)
+                if "values" not in cfg and c == cfg.get("value", ""):
+                    self.values_lb.selection_set(i)
+        finally:
+            self._suspend_select_events = False
+
+    def _ensure_pending_config_applied(self):
+        if self._pending_config:
+            self._apply_config_to_listboxes(self._pending_config)
 
     # ---------------- logic ----------------
     def _build_pivot(self, df: pd.DataFrame) -> pd.DataFrame | None:
+        self._ensure_pending_config_applied()
         rows = self._selected(self.rows_lb)
         cols = self._selected(self.cols_lb)
         vals = self._selected(self.values_lb)
@@ -249,14 +265,19 @@ class PivotFrame(ttk.Frame):
     def reset(self):
         self._pending_config = None
         self.generated = False
-        self.rows_lb.selection_clear(0, "end")
-        self.cols_lb.selection_clear(0, "end")
-        self.values_lb.selection_clear(0, "end")
+        self._suspend_select_events = True
+        try:
+            self.rows_lb.selection_clear(0, "end")
+            self.cols_lb.selection_clear(0, "end")
+            self.values_lb.selection_clear(0, "end")
+        finally:
+            self._suspend_select_events = False
         self.value_col.set("")
         self.agg_var.set("sum")
 
     # ---------------- presets ----------------
     def get_config(self):
+        self._ensure_pending_config_applied()
         return {
             "rows": self._selected(self.rows_lb),
             "columns": self._selected(self.cols_lb),
@@ -268,9 +289,6 @@ class PivotFrame(ttk.Frame):
     def load_config(self, cfg: dict):
         self.generated = False
         self.value_col.set("")
-        self.rows_lb.selection_clear(0, "end")
-        self.cols_lb.selection_clear(0, "end")
-        self.values_lb.selection_clear(0, "end")
         self._pending_config = dict(cfg or {})
         self._apply_config_to_listboxes(self._pending_config)
         self.agg_var.set(cfg.get("agg", "sum"))
