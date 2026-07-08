@@ -104,13 +104,16 @@ class PresetManager:
         }
 
         for s in app.sheets:
+            pivot_cfg = s["pivot"].get_config()
+            vlookup_cfg = s["vlookup"].get_config() if "vlookup" in s else {}
+            vlookup_cfg = PresetManager._normalize_vlookup_config_for_sheet(s, pivot_cfg, vlookup_cfg)
             sheet_cfg = {
                 "name": s["name"],
                 "filters": s["filters"].get_config(),
                 "sorts": s["sorts"].get_config(),
                 "columns": s["columns"].get_config(),
-                "pivot": s["pivot"].get_config(),
-                "vlookup": s["vlookup"].get_config() if "vlookup" in s else {},
+                "pivot": pivot_cfg,
+                "vlookup": vlookup_cfg,
             }
             data["sheets"].append(sheet_cfg)
 
@@ -118,6 +121,29 @@ class PresetManager:
             json.dump(data, f, indent=2)
 
         messagebox.showinfo("Preset Saved", f"Preset '{name}' saved successfully.")
+
+    @staticmethod
+    def _normalize_vlookup_config_for_sheet(sheet, pivot_cfg: dict, vlookup_cfg: dict) -> dict:
+        """Keep saved VLOOKUP steps aligned with the sheet workflow.
+
+        If the current sheet already has a final pivot-result VLOOKUP output, the
+        preset must replay the pivot before VLOOKUP. Older/manual runs can still
+        carry ``input_mode=base`` from before this workflow option existed, so we
+        correct those saved runs at preset-save time.
+        """
+        cfg = dict(vlookup_cfg or {})
+        runs = [dict(run or {}) for run in cfg.get("runs", [])]
+        has_final_pivot_vlookup = sheet.get("final_output_df") is not None and bool(pivot_cfg.get("generated"))
+        if has_final_pivot_vlookup:
+            cfg["input_mode"] = "pivot_result"
+            for run in runs:
+                run["input_mode"] = "pivot_result"
+        else:
+            cfg.setdefault("input_mode", "base")
+            for run in runs:
+                run.setdefault("input_mode", cfg["input_mode"])
+        cfg["runs"] = runs
+        return cfg
 
     @staticmethod
     def load(app):
