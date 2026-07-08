@@ -485,7 +485,9 @@ class ColumnsManagerFrame(ttk.Frame):
                 self.column_order.append(c)
                 self.column_visible[c] = True
 
-        self.column_order = [c for c in self.column_order if c in current_cols or c in formula_cols]
+        # Keep configured columns even when they are not present in the current
+        # raw dataframe yet. This is required for presets/workflows where columns
+        # are created later by pivot or VLOOKUP, then edited/calculated in this tab.
         self.column_visible = {c: self.column_visible.get(c, True) for c in self.column_order}
         self.dup_col_cb["values"] = self.column_order
         self._refresh_formula_column_choices(current_cols)
