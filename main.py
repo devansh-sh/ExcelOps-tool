@@ -811,8 +811,6 @@ class ExcelOpsApp(tk.Tk):
             # Keep pivot -> VLOOKUP results at sheet level. The raw loaded file
             # (self.df / datasets) remains unchanged.
             sheet["final_output_df"] = merged
-            if "pivot" in sheet:
-                sheet["pivot"].generated = False
         else:
             # Normal VLOOKUP augments this sheet's processed base data only; it
             # does not overwrite the raw loaded file.
@@ -876,7 +874,6 @@ class ExcelOpsApp(tk.Tk):
                     has_values = bool((vlookup_cfg.get("values", "") or "").strip())
                     if has_keys and has_values:
                         runs = [vlookup_cfg]
-                ran_pivot_result_vlookup = False
                 for run_cfg in runs:
                     if not self._run_vlookup_for_sheet(
                         sheet,
@@ -886,12 +883,8 @@ class ExcelOpsApp(tk.Tk):
                         record_history=False,
                     ):
                         break
-                    ran_pivot_result_vlookup = ran_pivot_result_vlookup or run_cfg.get("input_mode") == "pivot_result"
                 try:
-                    if ran_pivot_result_vlookup:
-                        sheet["pivot"].generated = False
-                    else:
-                        sheet["pivot"].load_config(sheet_cfg.get("pivot", {}))
+                    sheet["pivot"].load_config(sheet_cfg.get("pivot", {}))
                     sheet["pivot"].refresh_source_df(self.df)
                 except Exception:
                     pass
