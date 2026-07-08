@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import pandas as pd
 
-PRESET_DIR = os.path.join(os.getcwd(), "presets")
+PRESET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "presets")
 
 
 class PresetManager:
@@ -45,6 +45,45 @@ class PresetManager:
     # ---------- UI actions ----------
 
     @staticmethod
+    def _choose_preset_name(parent, title: str, presets: list[str]) -> str | None:
+        win = tk.Toplevel(parent)
+        win.title(title)
+        win.geometry("360x360")
+        win.transient(parent)
+        win.grab_set()
+
+        ttk.Label(win, text="Select a preset:").pack(anchor="w", padx=10, pady=(10, 4))
+
+        lb = tk.Listbox(win, exportselection=False)
+        lb.pack(fill="both", expand=True, padx=10, pady=(0, 8))
+        for name in presets:
+            lb.insert("end", name)
+        if presets:
+            lb.selection_set(0)
+
+        selected = {"value": None}
+
+        def on_ok():
+            sel = lb.curselection()
+            if not sel:
+                return
+            selected["value"] = lb.get(sel[0])
+            win.destroy()
+
+        def on_cancel():
+            win.destroy()
+
+        btns = ttk.Frame(win)
+        btns.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(btns, text="Cancel", command=on_cancel).pack(side="right", padx=4)
+        ttk.Button(btns, text="Load", command=on_ok).pack(side="right", padx=4)
+
+        lb.bind("<Double-1>", lambda e: on_ok())
+        win.wait_window()
+        return selected["value"]
+
+
+    @staticmethod
     def save(app):
         """
         Save preset from CURRENT sheets
@@ -71,6 +110,7 @@ class PresetManager:
                 "sorts": s["sorts"].get_config(),
                 "columns": s["columns"].get_config(),
                 "pivot": s["pivot"].get_config(),
+                "vlookup": s["vlookup"].get_config() if "vlookup" in s else {},
             }
             data["sheets"].append(sheet_cfg)
 
@@ -89,10 +129,7 @@ class PresetManager:
             messagebox.showinfo("No Presets", "No presets available.")
             return
 
-        name = simpledialog.askstring(
-            "Load Preset",
-            "Available presets:\n\n" + "\n".join(presets) + "\n\nEnter preset name:"
-        )
+        name = PresetManager._choose_preset_name(app, "Load Preset", presets)
         if not name:
             return
 
@@ -119,10 +156,61 @@ class PresetManager:
             s["sorts"].load_config(sheet_cfg.get("sorts", {}))
             s["columns"].load_config(sheet_cfg.get("columns", {}))
             s["pivot"].load_config(sheet_cfg.get("pivot", {}))
+            if "vlookup" in s:
+                s["vlookup"].load_config(sheet_cfg.get("vlookup", {}))
 
             # ensure df is wired so dropdowns populate
             try:
                 s["filters"].refresh_source_df(app.df)
+            except Exception:
+                pass
+            try:
+                s["columns"].refresh_source_df(app.df)
+            except Exception:
+                pass
+            try:
+                s["pivot"].refresh_source_df(app.df)
+            except Exception:
+                pass
+
+            # Re-run saved VLOOKUP steps from the preset. Always ask for the lookup
+            # files so presets remain portable across machines and folders.
+            try:
+                vlookup_cfg = sheet_cfg.get("vlookup", {})
+                runs = list(vlookup_cfg.get("runs", []))
+                if not runs:
+                    has_keys = bool((vlookup_cfg.get("main_keys", "") or "").strip())
+                    has_values = bool((vlookup_cfg.get("values", "") or "").strip())
+                    if has_keys and has_values:
+                        runs = [vlookup_cfg]
+                if runs and hasattr(app, "_run_vlookup_for_sheet"):
+                    should_run = messagebox.askyesno(
+                        "Run VLOOKUP preset?",
+                        (
+                            f"Preset sheet '{s['name']}' contains {len(runs)} saved VLOOKUP step(s).\n\n"
+                            "Do you want to select the lookup file(s) and run them now?"
+                        ),
+                    )
+                    if should_run:
+                        ran_pivot_result_vlookup = False
+                        for run_cfg in runs:
+                            if not app._run_vlookup_for_sheet(
+                                s,
+                                interactive=False,
+                                preset_override=run_cfg,
+                                prompt_for_file=True,
+                                record_history=False,
+                            ):
+                                break
+                            ran_pivot_result_vlookup = ran_pivot_result_vlookup or run_cfg.get("input_mode") == "pivot_result"
+                        try:
+                            if ran_pivot_result_vlookup:
+                                s["pivot"].generated = False
+                            else:
+                                s["pivot"].load_config(sheet_cfg.get("pivot", {}))
+                            s["pivot"].refresh_source_df(app.df)
+                        except Exception:
+                            pass
             except Exception:
                 pass
 
@@ -172,11 +260,7 @@ class PresetManager:
             messagebox.showerror("No Presets", "No presets available.")
             return None
 
-        return simpledialog.askstring(
-            "Select Preset",
-            "Available presets:\n\n" + "\n".join(presets) + "\n\nEnter preset name:",
-            parent=parent
-        )
+        return PresetManager._choose_preset_name(parent, "Select Preset", presets)
 
     @staticmethod
     def load_preset_data(name: str) -> dict:
