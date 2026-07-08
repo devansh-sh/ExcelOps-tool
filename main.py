@@ -802,6 +802,10 @@ class ExcelOpsApp(tk.Tk):
             self.datasets[self.active_dataset_name] = self.df
         self.lookup_path = lookup_path
         self.lookup_df = lookup_df
+        if (preset_cfg or {}).get("input_mode") == "pivot_result" and "pivot" in sheet:
+            # The current dataframe is already the pivot output plus VLOOKUP columns;
+            # do not apply the pivot a second time during preview/export.
+            sheet["pivot"].generated = False
         if record_history and "vlookup" in sheet and hasattr(sheet["vlookup"], "add_run_config"):
             sheet["vlookup"].add_run_config(preset_cfg)
         self._refresh_filters_after_data_change()
@@ -859,6 +863,7 @@ class ExcelOpsApp(tk.Tk):
                     has_values = bool((vlookup_cfg.get("values", "") or "").strip())
                     if has_keys and has_values:
                         runs = [vlookup_cfg]
+                ran_pivot_result_vlookup = False
                 for run_cfg in runs:
                     if not self._run_vlookup_for_sheet(
                         sheet,
@@ -868,8 +873,12 @@ class ExcelOpsApp(tk.Tk):
                         record_history=False,
                     ):
                         break
+                    ran_pivot_result_vlookup = ran_pivot_result_vlookup or run_cfg.get("input_mode") == "pivot_result"
                 try:
-                    sheet["pivot"].load_config(sheet_cfg.get("pivot", {}))
+                    if ran_pivot_result_vlookup:
+                        sheet["pivot"].generated = False
+                    else:
+                        sheet["pivot"].load_config(sheet_cfg.get("pivot", {}))
                     sheet["pivot"].refresh_source_df(self.df)
                 except Exception:
                     pass

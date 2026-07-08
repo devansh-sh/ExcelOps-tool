@@ -101,9 +101,16 @@ def perform_vlookup(
       - merged DataFrame on success, or None on cancel/error.
     """
 
-    # derive the DataFrame that will be merged into (the sheet's current result)
+    preset = preset or {}
+    input_mode = preset.get("input_mode", "base")
+
+    # derive the DataFrame that will be merged into.
+    # base: filters/sorts/calculated columns only (normal VLOOKUP before pivot).
+    # pivot_result: generated pivot output first, then VLOOKUP onto that result.
     try:
-        if hasattr(app, "_generate_base_df"):
+        if input_mode == "pivot_result" and hasattr(app, "_generate_filtered_df"):
+            main_df = app._generate_filtered_df(sheet)
+        elif hasattr(app, "_generate_base_df"):
             main_df = app._generate_base_df(sheet)
         else:
             main_df = app._generate_filtered_df(sheet)
@@ -143,8 +150,6 @@ def perform_vlookup(
     lookup_cols = list(lookup_df.columns.astype(str))
     main_col_map = {c.strip().lower(): c for c in main_cols}
     lookup_col_map = {c.strip().lower(): c for c in lookup_cols}
-
-    preset = preset or {}
 
     if preset.get("main_keys"):
         keys_main = [c.strip() for c in preset.get("main_keys", "").split(",") if c.strip()]

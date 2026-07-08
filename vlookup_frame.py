@@ -15,6 +15,7 @@ class VlookupFrame(ttk.Frame):
         self.prefix_var = tk.StringVar()
         self.default_fill_var = tk.StringVar()
         self.lookup_file_var = tk.StringVar()
+        self.input_mode_var = tk.StringVar(value="base")
         self.same_keys_var = tk.BooleanVar(value=True)
         self.vlookup_runs = []
         self.runs_count_var = tk.StringVar(value="Saved VLOOKUP steps: 0")
@@ -26,7 +27,7 @@ class VlookupFrame(ttk.Frame):
             self,
             text=(
                 "How to use VLOOKUP:\n"
-                "1) Choose your main sheet and apply filters if needed.\n"
+                "1) Choose whether VLOOKUP should use the normal sheet output or generated pivot result.\n"
                 "2) Choose a lookup file. Its columns will appear below.\n"
                 "3) Pick the main key, lookup key, and lookup value column(s).\n"
                 "4) Click Run VLOOKUP. Preview updates automatically."
@@ -74,11 +75,24 @@ class VlookupFrame(ttk.Frame):
         options.columnconfigure(1, weight=1)
         options.columnconfigure(3, weight=1)
 
-        ttk.Label(options, text="Prefix for added columns (optional)").grid(row=0, column=0, sticky="w", padx=(0, 6))
-        ttk.Entry(options, textvariable=self.prefix_var, width=28).grid(row=0, column=1, sticky="ew", padx=(0, 16))
+        ttk.Label(options, text="VLOOKUP input").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        input_mode = ttk.Combobox(
+            options,
+            textvariable=self.input_mode_var,
+            values=["base", "pivot_result"],
+            state="readonly",
+            width=18,
+        )
+        input_mode.grid(row=0, column=1, sticky="w", padx=(0, 16))
+        ttk.Label(options, text="base = filters/sorts/calculations, pivot_result = generated pivot output").grid(
+            row=0, column=2, columnspan=2, sticky="w"
+        )
 
-        ttk.Label(options, text="Default fill for missing matches (optional)").grid(row=0, column=2, sticky="w", padx=(0, 6))
-        ttk.Entry(options, textvariable=self.default_fill_var, width=28).grid(row=0, column=3, sticky="ew")
+        ttk.Label(options, text="Prefix for added columns (optional)").grid(row=1, column=0, sticky="w", padx=(0, 6))
+        ttk.Entry(options, textvariable=self.prefix_var, width=28).grid(row=1, column=1, sticky="ew", padx=(0, 16))
+
+        ttk.Label(options, text="Default fill for missing matches (optional)").grid(row=1, column=2, sticky="w", padx=(0, 6))
+        ttk.Entry(options, textvariable=self.default_fill_var, width=28).grid(row=1, column=3, sticky="ew")
 
         lookup_picker = ttk.Frame(self)
         lookup_picker.pack(fill="x", **pad)
@@ -128,6 +142,7 @@ class VlookupFrame(ttk.Frame):
             "prefix": self.prefix_var.get(),
             "default_fill": self.default_fill_var.get(),
             "lookup_file": self.lookup_file_var.get(),
+            "input_mode": self.input_mode_var.get(),
         }
         runs = list(self.vlookup_runs)
         current_run = self._snapshot_from_config(current)
@@ -152,6 +167,7 @@ class VlookupFrame(ttk.Frame):
         self.prefix_var.set(display_cfg.get("prefix", ""))
         self.default_fill_var.set(display_cfg.get("default_fill", ""))
         self.lookup_file_var.set(display_cfg.get("lookup_file", ""))
+        self.input_mode_var.set(display_cfg.get("input_mode", "base"))
         self.same_keys_var.set(display_cfg.get("lookup_keys", "") == "")
         self._apply_listbox_selections()
         self._toggle_lookup_keys()
@@ -184,6 +200,7 @@ class VlookupFrame(ttk.Frame):
             "prefix": cfg.get("prefix", ""),
             "default_fill": cfg.get("default_fill", ""),
             "lookup_file": cfg.get("lookup_file", ""),
+            "input_mode": cfg.get("input_mode", "base"),
         }
 
     def _has_vlookup_fields(self, cfg: dict):
@@ -203,7 +220,8 @@ class VlookupFrame(ttk.Frame):
             lookup_file = run.get("lookup_file") or "choose file on preset load"
             self.runs_lb.insert(
                 "end",
-                f"{i}. {run.get('main_keys', '')} → {run.get('lookup_keys') or 'same key'} | "
+                f"{i}. input: {run.get('input_mode', 'base')} | "
+                f"{run.get('main_keys', '')} → {run.get('lookup_keys') or 'same key'} | "
                 f"add: {run.get('values', '')} | file: {lookup_file}",
             )
 

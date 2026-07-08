@@ -192,6 +192,7 @@ class PresetManager:
                         ),
                     )
                     if should_run:
+                        ran_pivot_result_vlookup = False
                         for run_cfg in runs:
                             if not app._run_vlookup_for_sheet(
                                 s,
@@ -201,8 +202,12 @@ class PresetManager:
                                 record_history=False,
                             ):
                                 break
+                            ran_pivot_result_vlookup = ran_pivot_result_vlookup or run_cfg.get("input_mode") == "pivot_result"
                         try:
-                            s["pivot"].load_config(sheet_cfg.get("pivot", {}))
+                            if ran_pivot_result_vlookup:
+                                s["pivot"].generated = False
+                            else:
+                                s["pivot"].load_config(sheet_cfg.get("pivot", {}))
                             s["pivot"].refresh_source_df(app.df)
                         except Exception:
                             pass
