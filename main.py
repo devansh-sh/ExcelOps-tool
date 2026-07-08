@@ -751,6 +751,11 @@ class ExcelOpsApp(tk.Tk):
         preset_cfg = preset_override or {}
         if not preset_override and "vlookup" in sheet and hasattr(sheet["vlookup"], "get_config"):
             preset_cfg = sheet["vlookup"].get_config()
+        preset_cfg = dict(preset_cfg or {})
+        if "input_mode" not in preset_cfg and getattr(sheet.get("pivot"), "generated", False):
+            # Backward compatibility for older saved VLOOKUP steps created after
+            # generating a pivot but before input_mode existed.
+            preset_cfg["input_mode"] = "pivot_result"
 
         lookup_path = self.lookup_path
         lookup_df = self.lookup_df
@@ -1126,6 +1131,8 @@ class ExcelOpsApp(tk.Tk):
             if "vlookup" in sheet and hasattr(sheet["vlookup"], "set_columns"):
                 try:
                     sheet["vlookup"].set_columns(list(pivot_df.columns))
+                    if hasattr(sheet["vlookup"], "use_pivot_result_input"):
+                        sheet["vlookup"].use_pivot_result_input()
                 except Exception:
                     pass
         self.open_preview_tab()

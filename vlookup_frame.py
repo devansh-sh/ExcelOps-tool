@@ -118,6 +118,11 @@ class VlookupFrame(ttk.Frame):
         self.runs_lb.pack(fill="x", padx=6, pady=6)
         self._toggle_lookup_keys()
 
+
+    def use_pivot_result_input(self):
+        """Switch VLOOKUP to use the generated pivot output as its main table."""
+        self.input_mode_var.set("pivot_result")
+
     def _run_vlookup_clicked(self):
         if not self.lookup_file_var.get() and callable(self.on_pick_lookup_file):
             self.on_pick_lookup_file()
