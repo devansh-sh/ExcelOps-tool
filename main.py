@@ -593,6 +593,8 @@ class ExcelOpsApp(tk.Tk):
             "columns": columns_frame,
             "pivot": pivot_frame,
             "vlookup": vlookup_frame,
+            "vlookup_base_df": None,
+            "final_output_df": None,
         }
         self.sheets.append(sheet)
 
@@ -797,18 +799,24 @@ class ExcelOpsApp(tk.Tk):
         if merged is None:
             return False
 
-        self.df = merged.reset_index(drop=True)
-        if self.active_dataset_name:
-            self.datasets[self.active_dataset_name] = self.df
+        merged = merged.reset_index(drop=True)
         self.lookup_path = lookup_path
         self.lookup_df = lookup_df
-        if (preset_cfg or {}).get("input_mode") == "pivot_result" and "pivot" in sheet:
-            # The current dataframe is already the pivot output plus VLOOKUP columns;
-            # do not apply the pivot a second time during preview/export.
-            sheet["pivot"].generated = False
+        if (preset_cfg or {}).get("input_mode") == "pivot_result":
+            # Keep pivot -> VLOOKUP results at sheet level. The raw loaded file
+            # (self.df / datasets) remains unchanged.
+            sheet["final_output_df"] = merged
+            if "pivot" in sheet:
+                sheet["pivot"].generated = False
+        else:
+            # Normal VLOOKUP augments this sheet's processed base data only; it
+            # does not overwrite the raw loaded file.
+            sheet["vlookup_base_df"] = merged
+            sheet["final_output_df"] = None
+        if "vlookup" in sheet and hasattr(sheet["vlookup"], "set_columns"):
+            sheet["vlookup"].set_columns(list(merged.columns))
         if record_history and "vlookup" in sheet and hasattr(sheet["vlookup"], "add_run_config"):
             sheet["vlookup"].add_run_config(preset_cfg)
-        self._refresh_filters_after_data_change()
         self.update_preview()
         return True
 
@@ -1054,6 +1062,16 @@ class ExcelOpsApp(tk.Tk):
 
     # ---------------- Core df generation ----------------
     def _generate_filtered_df(self, sheet) -> pd.DataFrame:
+        if sheet.get("final_output_df") is not None:
+            return sheet["final_output_df"].copy()
+        if sheet.get("vlookup_base_df") is not None:
+            df = sheet["vlookup_base_df"].copy()
+            try:
+                df = sheet["pivot"].apply_pivot_if_requested(df)
+            except Exception:
+                pass
+            return df
+
         df = self.df.copy()
         try:
             df = sheet["filters"].apply_filters(df)
@@ -1075,6 +1093,8 @@ class ExcelOpsApp(tk.Tk):
         return df
 
     def _generate_base_df(self, sheet) -> pd.DataFrame:
+        if sheet.get("vlookup_base_df") is not None:
+            return sheet["vlookup_base_df"].copy()
         df = self.df.copy()
         try:
             df = sheet["filters"].apply_filters(df)
@@ -1100,6 +1120,14 @@ class ExcelOpsApp(tk.Tk):
             messagebox.showinfo("Pivot", "No pivot result with current selections.")
             return
         # ensure preview tab exists and select it
+        idx = self._active_sheet_index()
+        if idx is not None and idx < len(self.sheets):
+            sheet = self.sheets[idx]
+            if "vlookup" in sheet and hasattr(sheet["vlookup"], "set_columns"):
+                try:
+                    sheet["vlookup"].set_columns(list(pivot_df.columns))
+                except Exception:
+                    pass
         self.open_preview_tab()
         self._render_df_into_tree(pivot_df, self.preview_tree)
         self.preview_deletable = False

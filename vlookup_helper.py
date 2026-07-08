@@ -105,10 +105,16 @@ def perform_vlookup(
     input_mode = preset.get("input_mode", "base")
 
     # derive the DataFrame that will be merged into.
+    # Existing sheet-level VLOOKUP output is used first so multiple VLOOKUP
+    # steps chain together without mutating the raw loaded file.
     # base: filters/sorts/calculated columns only (normal VLOOKUP before pivot).
     # pivot_result: generated pivot output first, then VLOOKUP onto that result.
     try:
-        if input_mode == "pivot_result" and hasattr(app, "_generate_filtered_df"):
+        if sheet.get("final_output_df") is not None:
+            main_df = sheet["final_output_df"].copy()
+        elif sheet.get("vlookup_base_df") is not None:
+            main_df = sheet["vlookup_base_df"].copy()
+        elif input_mode == "pivot_result" and hasattr(app, "_generate_filtered_df"):
             main_df = app._generate_filtered_df(sheet)
         elif hasattr(app, "_generate_base_df"):
             main_df = app._generate_base_df(sheet)
