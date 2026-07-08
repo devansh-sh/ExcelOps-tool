@@ -201,6 +201,11 @@ class PresetManager:
                                 record_history=False,
                             ):
                                 break
+                        try:
+                            s["pivot"].load_config(sheet_cfg.get("pivot", {}))
+                            s["pivot"].refresh_source_df(app.df)
+                        except Exception:
+                            pass
             except Exception:
                 pass
 

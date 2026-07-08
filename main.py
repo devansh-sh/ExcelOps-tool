@@ -868,6 +868,11 @@ class ExcelOpsApp(tk.Tk):
                         record_history=False,
                     ):
                         break
+                try:
+                    sheet["pivot"].load_config(sheet_cfg.get("pivot", {}))
+                    sheet["pivot"].refresh_source_df(self.df)
+                except Exception:
+                    pass
 
         self._ensure_plus_tab()
         self._refresh_preview_selector()

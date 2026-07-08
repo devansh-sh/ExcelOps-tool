@@ -168,8 +168,13 @@ class PivotFrame(ttk.Frame):
         finally:
             self._suspend_select_events = False
 
+    def _ensure_pending_config_applied(self):
+        if self._pending_config:
+            self._apply_config_to_listboxes(self._pending_config)
+
     # ---------------- logic ----------------
     def _build_pivot(self, df: pd.DataFrame) -> pd.DataFrame | None:
+        self._ensure_pending_config_applied()
         rows = self._selected(self.rows_lb)
         cols = self._selected(self.cols_lb)
         vals = self._selected(self.values_lb)
@@ -272,6 +277,7 @@ class PivotFrame(ttk.Frame):
 
     # ---------------- presets ----------------
     def get_config(self):
+        self._ensure_pending_config_applied()
         return {
             "rows": self._selected(self.rows_lb),
             "columns": self._selected(self.cols_lb),
