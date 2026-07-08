@@ -1119,6 +1119,24 @@ class ExcelOpsApp(tk.Tk):
             pass
         return df
 
+    def _generate_base_df(self, sheet) -> pd.DataFrame:
+        if sheet.get("vlookup_base_df") is not None:
+            return sheet["vlookup_base_df"].copy()
+        df = self.df.copy()
+        try:
+            df = sheet["filters"].apply_filters(df)
+        except Exception:
+            pass
+        try:
+            df = sheet["sorts"].apply_sorts(df)
+        except Exception:
+            pass
+        try:
+            df = sheet["columns"].apply_columns(df)
+        except Exception:
+            pass
+        return df
+
     def on_sheet_change(self):
         # called by inner frames to request live preview update
         self.update_preview()
