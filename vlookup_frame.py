@@ -69,6 +69,7 @@ class VlookupFrame(ttk.Frame):
         ttk.Label(form, text="3. Column(s) to bring from lookup file").grid(row=0, column=2, sticky="w", padx=6, pady=4)
         self.values_lb = tk.Listbox(form, selectmode="multiple", height=7, exportselection=False)
         self.values_lb.grid(row=1, column=2, sticky="nsew", padx=6, pady=4)
+        self.values_lb.bind("<<ListboxSelect>>", lambda _event: self._sync_values_var())
 
         options = ttk.Frame(form)
         options.grid(row=2, column=0, columnspan=3, sticky="ew", padx=6, pady=(6, 4))
@@ -132,14 +133,15 @@ class VlookupFrame(ttk.Frame):
             self.on_vlookup()
 
     def get_config(self):
-        main_keys = self._selected(self.main_keys_lb)
+        main_keys = self._selected(self.main_keys_lb) or self._csv_to_list(self.main_keys_var.get())
         selected_lookup_keys = self._selected(self.lookup_keys_lb)
         manual_lookup_keys = self.lookup_keys_var.get().strip()
         lookup_keys = ""
         if not self.same_keys_var.get():
             lookup_keys = ", ".join(selected_lookup_keys) if selected_lookup_keys else manual_lookup_keys
         key_names = self._lookup_key_name_set(main_keys, lookup_keys)
-        values = [v for v in self._selected(self.values_lb) if str(v).strip().lower() not in key_names]
+        selected_values = self._selected(self.values_lb) or self._csv_to_list(self.values_var.get())
+        values = [v for v in selected_values if str(v).strip().lower() not in key_names]
         current = {
             "main_keys": ", ".join(main_keys),
             "lookup_keys": lookup_keys,
@@ -261,6 +263,9 @@ class VlookupFrame(ttk.Frame):
     def _selected(self, listbox):
         return [listbox.get(i) for i in listbox.curselection()]
 
+    def _csv_to_list(self, text):
+        return [c.strip() for c in str(text or "").split(",") if c.strip()]
+
     def _select_values(self, listbox, values):
         listbox.selection_clear(0, "end")
         value_lookup = {v.strip().lower() for v in values}
@@ -280,6 +285,11 @@ class VlookupFrame(ttk.Frame):
         if selected:
             self.lookup_keys_var.set(", ".join(selected))
         self._remove_lookup_keys_from_values()
+
+    def _sync_values_var(self):
+        selected = self._selected(self.values_lb)
+        if selected:
+            self.values_var.set(", ".join(selected))
 
     def _auto_match_lookup_key(self):
         if not self.lookup_columns:

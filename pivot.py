@@ -59,13 +59,13 @@ class PivotFrame(ttk.Frame):
 
         # ---- Rows ----
         ttk.Label(self, text="Rows").pack(anchor="w", **pad)
-        self.rows_lb = tk.Listbox(self, selectmode="multiple", height=5)
+        self.rows_lb = tk.Listbox(self, selectmode="multiple", height=5, exportselection=False)
         self.rows_lb.pack(fill="x", **pad)
         self.rows_lb.bind("<<ListboxSelect>>", self._mark_user_changed)
 
         # ---- Columns ----
         ttk.Label(self, text="Columns (optional)").pack(anchor="w", **pad)
-        self.cols_lb = tk.Listbox(self, selectmode="multiple", height=4)
+        self.cols_lb = tk.Listbox(self, selectmode="multiple", height=4, exportselection=False)
         self.cols_lb.pack(fill="x", **pad)
         self.cols_lb.bind("<<ListboxSelect>>", self._mark_user_changed)
 
