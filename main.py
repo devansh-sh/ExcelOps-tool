@@ -818,6 +818,8 @@ class ExcelOpsApp(tk.Tk):
             sheet["final_output_df"] = None
         if "columns" in sheet and hasattr(sheet["columns"], "refresh_source_df"):
             sheet["columns"].refresh_source_df(merged)
+        if (preset_cfg or {}).get("input_mode") != "pivot_result" and "pivot" in sheet and hasattr(sheet["pivot"], "refresh_source_df"):
+            sheet["pivot"].refresh_source_df(merged)
         if "vlookup" in sheet and hasattr(sheet["vlookup"], "set_columns"):
             sheet["vlookup"].set_columns(list(merged.columns))
         if record_history and "vlookup" in sheet and hasattr(sheet["vlookup"], "add_run_config"):
@@ -859,7 +861,6 @@ class ExcelOpsApp(tk.Tk):
             for key, refresh_name in (
                 ("filters", "refresh_source_df"),
                 ("columns", "refresh_source_df"),
-                ("pivot", "refresh_source_df"),
             ):
                 try:
                     frame = sheet[key]
@@ -867,6 +868,10 @@ class ExcelOpsApp(tk.Tk):
                         getattr(frame, refresh_name)(self.df)
                 except Exception:
                     pass
+            try:
+                sheet["pivot"].refresh_source_df(self._generate_base_df(sheet))
+            except Exception:
+                pass
 
             if run_vlookups:
                 vlookup_cfg = sheet_cfg.get("vlookup", {})
@@ -887,7 +892,7 @@ class ExcelOpsApp(tk.Tk):
                         break
                 try:
                     sheet["pivot"].load_config(sheet_cfg.get("pivot", {}))
-                    sheet["pivot"].refresh_source_df(self.df)
+                    sheet["pivot"].refresh_source_df(self._generate_base_df(sheet))
                 except Exception:
                     pass
 
@@ -1097,24 +1102,6 @@ class ExcelOpsApp(tk.Tk):
             df = sheet["pivot"].apply_pivot_if_requested(df)
             if df is not before_pivot:
                 df = self._apply_result_columns(sheet, df)
-        except Exception:
-            pass
-        return df
-
-    def _generate_base_df(self, sheet) -> pd.DataFrame:
-        if sheet.get("vlookup_base_df") is not None:
-            return sheet["vlookup_base_df"].copy()
-        df = self.df.copy()
-        try:
-            df = sheet["filters"].apply_filters(df)
-        except Exception:
-            pass
-        try:
-            df = sheet["sorts"].apply_sorts(df)
-        except Exception:
-            pass
-        try:
-            df = sheet["columns"].apply_columns(df)
         except Exception:
             pass
         return df

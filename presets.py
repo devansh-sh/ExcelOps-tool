@@ -195,7 +195,10 @@ class PresetManager:
             except Exception:
                 pass
             try:
-                s["pivot"].refresh_source_df(app.df)
+                if hasattr(app, "_generate_base_df"):
+                    s["pivot"].refresh_source_df(app._generate_base_df(s))
+                else:
+                    s["pivot"].refresh_source_df(app.df)
             except Exception:
                 pass
 
@@ -229,7 +232,10 @@ class PresetManager:
                                 break
                         try:
                             s["pivot"].load_config(sheet_cfg.get("pivot", {}))
-                            s["pivot"].refresh_source_df(app.df)
+                            if hasattr(app, "_generate_base_df"):
+                                s["pivot"].refresh_source_df(app._generate_base_df(s))
+                            else:
+                                s["pivot"].refresh_source_df(app.df)
                         except Exception:
                             pass
             except Exception:
