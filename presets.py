@@ -107,13 +107,15 @@ class PresetManager:
             pivot_cfg = s["pivot"].get_config()
             vlookup_cfg = s["vlookup"].get_config() if "vlookup" in s else {}
             vlookup_cfg = PresetManager._normalize_vlookup_config_for_sheet(s, pivot_cfg, vlookup_cfg)
+            columns_cfg = s["columns"].get_config()
             sheet_cfg = {
                 "name": s["name"],
                 "filters": s["filters"].get_config(),
                 "sorts": s["sorts"].get_config(),
-                "columns": s["columns"].get_config(),
+                "columns": columns_cfg,
                 "pivot": pivot_cfg,
                 "vlookup": vlookup_cfg,
+                "workflow": PresetManager._build_workflow_for_sheet(pivot_cfg, vlookup_cfg, columns_cfg),
             }
             data["sheets"].append(sheet_cfg)
 
@@ -121,6 +123,32 @@ class PresetManager:
             json.dump(data, f, indent=2)
 
         messagebox.showinfo("Preset Saved", f"Preset '{name}' saved successfully.")
+
+    @staticmethod
+    def _build_workflow_for_sheet(pivot_cfg: dict, vlookup_cfg: dict, columns_cfg: dict) -> list[dict]:
+        """Save an explicit ordered workflow for each sheet.
+
+        The current UI's supported ordered workflow is:
+        pivot (when generated) -> saved VLOOKUP steps in run order ->
+        calculations/column editing. This makes preset replay deterministic
+        instead of reconstructing order from independent feature configs.
+        """
+        workflow = []
+        if (pivot_cfg or {}).get("generated"):
+            workflow.append({"type": "pivot"})
+
+        runs = list((vlookup_cfg or {}).get("runs", []))
+        if not runs:
+            has_keys = bool(((vlookup_cfg or {}).get("main_keys", "") or "").strip())
+            has_values = bool(((vlookup_cfg or {}).get("values", "") or "").strip())
+            if has_keys and has_values:
+                runs = [vlookup_cfg]
+        for run in runs:
+            workflow.append({"type": "vlookup", "config": dict(run or {})})
+
+        if columns_cfg:
+            workflow.append({"type": "columns"})
+        return workflow
 
     @staticmethod
     def _normalize_vlookup_config_for_sheet(sheet, pivot_cfg: dict, vlookup_cfg: dict) -> dict:
@@ -221,23 +249,18 @@ class PresetManager:
                         ),
                     )
                     if should_run:
-                        for run_cfg in runs:
-                            if not app._run_vlookup_for_sheet(
-                                s,
-                                interactive=False,
-                                preset_override=run_cfg,
-                                prompt_for_file=True,
-                                record_history=False,
-                            ):
-                                break
-                        try:
-                            s["pivot"].load_config(sheet_cfg.get("pivot", {}))
-                            if hasattr(app, "_generate_base_df"):
-                                s["pivot"].refresh_source_df(app._generate_base_df(s))
-                            else:
-                                s["pivot"].refresh_source_df(app.df)
-                        except Exception:
-                            pass
+                        if hasattr(app, "_run_ordered_sheet_workflow"):
+                            app._run_ordered_sheet_workflow(s, sheet_cfg, prompt_for_files=True)
+                        else:
+                            for run_cfg in runs:
+                                if not app._run_vlookup_for_sheet(
+                                    s,
+                                    interactive=False,
+                                    preset_override=run_cfg,
+                                    prompt_for_file=True,
+                                    record_history=False,
+                                ):
+                                    break
             except Exception:
                 pass
 

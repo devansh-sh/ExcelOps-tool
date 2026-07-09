@@ -595,6 +595,7 @@ class ExcelOpsApp(tk.Tk):
             "vlookup": vlookup_frame,
             "vlookup_base_df": None,
             "final_output_df": None,
+            "workflow_output_finalized": False,
         }
         self.sheets.append(sheet)
 
@@ -747,6 +748,8 @@ class ExcelOpsApp(tk.Tk):
         preset_override=None,
         prompt_for_file=False,
         record_history=True,
+        main_df_override=None,
+        update_sheet_state=True,
     ):
         preset_cfg = preset_override or {}
         if not preset_override and "vlookup" in sheet and hasattr(sheet["vlookup"], "get_config"):
@@ -800,6 +803,7 @@ class ExcelOpsApp(tk.Tk):
             lookup_df=lookup_df,
             lookup_path=lookup_path,
             interactive=interactive,
+            main_df_override=main_df_override,
         )
         if merged is None:
             return False
@@ -807,15 +811,19 @@ class ExcelOpsApp(tk.Tk):
         merged = merged.reset_index(drop=True)
         self.lookup_path = lookup_path
         self.lookup_df = lookup_df
+        if not update_sheet_state:
+            return merged
         if (preset_cfg or {}).get("input_mode") == "pivot_result":
             # Keep pivot -> VLOOKUP results at sheet level. The raw loaded file
             # (self.df / datasets) remains unchanged.
             sheet["final_output_df"] = merged
+            sheet["workflow_output_finalized"] = False
         else:
             # Normal VLOOKUP augments this sheet's processed base data only; it
             # does not overwrite the raw loaded file.
             sheet["vlookup_base_df"] = merged
             sheet["final_output_df"] = None
+            sheet["workflow_output_finalized"] = False
         if "columns" in sheet and hasattr(sheet["columns"], "refresh_source_df"):
             sheet["columns"].refresh_source_df(merged)
         if (preset_cfg or {}).get("input_mode") != "pivot_result" and "pivot" in sheet and hasattr(sheet["pivot"], "refresh_source_df"):
@@ -825,6 +833,92 @@ class ExcelOpsApp(tk.Tk):
         if record_history and "vlookup" in sheet and hasattr(sheet["vlookup"], "add_run_config"):
             sheet["vlookup"].add_run_config(preset_cfg)
         self.update_preview()
+        return True
+
+    def _generate_pre_workflow_base_df(self, sheet) -> pd.DataFrame:
+        """Generate the starting table for an ordered sheet workflow.
+
+        This intentionally applies filters and sorts only. Column/calculation
+        edits are handled by the explicit ``columns`` workflow step so presets
+        can represent workflows such as: pivot -> VLOOKUP1 -> VLOOKUP2 ->
+        calculations/column editing.
+        """
+        df = self.df.copy()
+        try:
+            df = sheet["filters"].apply_filters(df)
+        except Exception:
+            pass
+        try:
+            df = sheet["sorts"].apply_sorts(df)
+        except Exception:
+            pass
+        return df
+
+    def _build_default_workflow_steps(self, sheet_cfg: dict) -> list[dict]:
+        steps: list[dict] = []
+        pivot_cfg = sheet_cfg.get("pivot", {}) or {}
+        vlookup_cfg = sheet_cfg.get("vlookup", {}) or {}
+        runs = list(vlookup_cfg.get("runs", []))
+        if not runs and (vlookup_cfg.get("main_keys") or "").strip() and (vlookup_cfg.get("values") or "").strip():
+            runs = [vlookup_cfg]
+
+        if pivot_cfg.get("generated"):
+            steps.append({"type": "pivot"})
+        for run in runs:
+            steps.append({"type": "vlookup", "config": dict(run or {})})
+        if sheet_cfg.get("columns"):
+            steps.append({"type": "columns"})
+        return steps
+
+    def _run_ordered_sheet_workflow(self, sheet, sheet_cfg: dict, prompt_for_files: bool = False) -> bool:
+        """Replay a saved per-sheet workflow in the exact stored order."""
+        workflow = list(sheet_cfg.get("workflow", [])) or self._build_default_workflow_steps(sheet_cfg)
+        sheet["vlookup_base_df"] = None
+        sheet["final_output_df"] = None
+        sheet["workflow_output_finalized"] = False
+
+        df = self._generate_pre_workflow_base_df(sheet)
+        for step in workflow:
+            step_type = step.get("type")
+            if step_type == "pivot":
+                try:
+                    sheet["pivot"].load_config(sheet_cfg.get("pivot", {}))
+                    sheet["pivot"].refresh_source_df(df)
+                    pivot_df = sheet["pivot"]._build_pivot(df)
+                    if pivot_df is not None:
+                        df = pivot_df.reset_index(drop=True)
+                        sheet["pivot"].generated = True
+                except Exception as e:
+                    messagebox.showerror("Workflow error", f"Pivot step failed on '{sheet['name']}':\n{e}")
+                    return False
+            elif step_type == "vlookup":
+                run_cfg = dict(step.get("config") or {})
+                merged = self._run_vlookup_for_sheet(
+                    sheet,
+                    interactive=False,
+                    preset_override=run_cfg,
+                    prompt_for_file=prompt_for_files,
+                    record_history=False,
+                    main_df_override=df,
+                    update_sheet_state=False,
+                )
+                if merged is False or merged is None:
+                    return False
+                df = merged.reset_index(drop=True)
+            elif step_type == "columns":
+                try:
+                    sheet["columns"].refresh_source_df(df)
+                    df = sheet["columns"].apply_columns(df).reset_index(drop=True)
+                except Exception as e:
+                    messagebox.showerror("Workflow error", f"Columns/calculations step failed on '{sheet['name']}':\n{e}")
+                    return False
+
+        sheet["final_output_df"] = df.reset_index(drop=True)
+        sheet["workflow_output_finalized"] = True
+        if "columns" in sheet and hasattr(sheet["columns"], "refresh_source_df"):
+            sheet["columns"].refresh_source_df(sheet["final_output_df"])
+        if "vlookup" in sheet and hasattr(sheet["vlookup"], "set_columns"):
+            sheet["vlookup"].set_columns(list(sheet["final_output_df"].columns))
         return True
 
     def apply_vlookup(self):
@@ -874,27 +968,7 @@ class ExcelOpsApp(tk.Tk):
                 pass
 
             if run_vlookups:
-                vlookup_cfg = sheet_cfg.get("vlookup", {})
-                runs = list(vlookup_cfg.get("runs", []))
-                if not runs:
-                    has_keys = bool((vlookup_cfg.get("main_keys", "") or "").strip())
-                    has_values = bool((vlookup_cfg.get("values", "") or "").strip())
-                    if has_keys and has_values:
-                        runs = [vlookup_cfg]
-                for run_cfg in runs:
-                    if not self._run_vlookup_for_sheet(
-                        sheet,
-                        interactive=False,
-                        preset_override=run_cfg,
-                        prompt_for_file=True,
-                        record_history=False,
-                    ):
-                        break
-                try:
-                    sheet["pivot"].load_config(sheet_cfg.get("pivot", {}))
-                    sheet["pivot"].refresh_source_df(self._generate_base_df(sheet))
-                except Exception:
-                    pass
+                self._run_ordered_sheet_workflow(sheet, sheet_cfg, prompt_for_files=True)
 
         self._ensure_plus_tab()
         self._refresh_preview_selector()
@@ -1074,6 +1148,8 @@ class ExcelOpsApp(tk.Tk):
 
     def _generate_filtered_df(self, sheet) -> pd.DataFrame:
         if sheet.get("final_output_df") is not None:
+            if sheet.get("workflow_output_finalized"):
+                return sheet["final_output_df"].copy()
             return self._apply_result_columns(sheet, sheet["final_output_df"].copy())
         if sheet.get("vlookup_base_df") is not None:
             df = sheet["vlookup_base_df"].copy()

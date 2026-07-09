@@ -88,6 +88,7 @@ def perform_vlookup(
     lookup_df: pd.DataFrame | None = None,
     lookup_path: str | None = None,
     interactive: bool = True,
+    main_df_override: pd.DataFrame | None = None,
 ):
     """
     Perform left-join (VLOOKUP-like) merging the current sheet's filtered DataFrame
@@ -110,7 +111,9 @@ def perform_vlookup(
     # base: filters/sorts/calculated columns only (normal VLOOKUP before pivot).
     # pivot_result: generated pivot output first, then VLOOKUP onto that result.
     try:
-        if input_mode == "pivot_result":
+        if main_df_override is not None:
+            main_df = main_df_override.copy()
+        elif input_mode == "pivot_result":
             if sheet.get("final_output_df") is not None:
                 main_df = sheet["final_output_df"].copy()
             elif hasattr(app, "_generate_filtered_df"):
