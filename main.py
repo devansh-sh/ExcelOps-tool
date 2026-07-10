@@ -79,6 +79,18 @@ class ExcelOpsApp(tk.Tk):
         style.configure("Card.TLabel", background=self.card_bg, foreground="#111827", font=("Arial", 10))
         style.configure("Muted.TLabel", background=self.ui_bg, foreground=self.muted, font=("Arial", 9))
         style.configure(
+            "Hero.TLabel",
+            background=self.ui_bg,
+            foreground=self.accent_dark,
+            font=("Arial", 28, "bold"),
+        )
+        style.configure(
+            "Subtitle.TLabel",
+            background=self.ui_bg,
+            foreground=self.muted,
+            font=("Arial", 12),
+        )
+        style.configure(
             "Brand.TLabel",
             background=self.ui_bg,
             foreground=self.accent_dark,
@@ -92,7 +104,9 @@ class ExcelOpsApp(tk.Tk):
         )
         style.configure("TButton", padding=(12, 7), font=("Arial", 10), borderwidth=0)
         style.map("TButton", background=[("active", "#dbe7c2")])
-        style.configure("Accent.TButton", padding=(14, 7), font=("Arial", 10, "bold"))
+        style.configure("Accent.TButton", padding=(16, 9), font=("Arial", 10, "bold"))
+        style.configure("Hero.TButton", padding=(24, 16), font=("Arial", 13, "bold"))
+        style.configure("Quiet.TButton", padding=(12, 7), font=("Arial", 10))
         style.configure("TCheckbutton", background=self.ui_bg, foreground="#111827")
         style.configure("Card.TCheckbutton", background=self.card_bg, foreground="#111827")
         style.configure("TCombobox", padding=5)
@@ -117,13 +131,15 @@ class ExcelOpsApp(tk.Tk):
             foreground=self.accent_dark,
         )
 
-    def _build_branding_footer(self):
-        footer = ttk.Frame(self, style="Footer.TFrame")
+    def _build_branding_footer(self, parent=None):
+        parent = parent or self
+        footer = ttk.Frame(parent, style="Footer.TFrame")
         footer.pack(side="bottom", fill="x", padx=14, pady=(0, 10))
+        self.footer_frame = footer
 
         ttk.Label(
             footer,
-            text="Spreadsheet analysis made simple",
+            textvariable=getattr(self, "status_var", tk.StringVar(value="Ready")),
             style="Muted.TLabel",
         ).pack(side="left", anchor="w")
 
@@ -180,12 +196,119 @@ class ExcelOpsApp(tk.Tk):
         logo.create_text(42, 50, text="BDS", fill=leaf_color, font=("Arial", 13, "bold"))
         return logo
 
+    def _hide_main_ui(self):
+        for widget in getattr(self, "main_widgets", []):
+            try:
+                widget.pack_forget()
+            except Exception:
+                pass
+
+    def _show_main_ui(self):
+        if getattr(self, "home_frame", None) is not None:
+            self.home_frame.pack_forget()
+        self.toolbar_frame.pack(side="top", fill="x", padx=12, pady=(10, 6), ipady=6)
+        self.workspace_frame.pack(fill="both", expand=True, padx=12, pady=8)
+        self.footer_frame.pack(side="bottom", fill="x", padx=14, pady=(0, 10))
+
+    def _show_home_screen(self):
+        self._hide_main_ui()
+        if self.home_frame is None:
+            self.home_frame = ttk.Frame(self, style="Footer.TFrame")
+
+            hero = ttk.Frame(self.home_frame, style="Footer.TFrame")
+            hero.pack(fill="both", expand=True, padx=42, pady=34)
+
+            header = ttk.Frame(hero, style="Footer.TFrame")
+            header.pack(fill="x", pady=(10, 28))
+            ttk.Label(header, text="ExcelOps", style="Hero.TLabel").pack(anchor="center")
+            ttk.Label(
+                header,
+                text="Build powerful spreadsheet workflows once. Run them in a few clicks.",
+                style="Subtitle.TLabel",
+            ).pack(anchor="center", pady=(8, 0))
+
+            cards = ttk.Frame(hero, style="Footer.TFrame")
+            cards.pack(anchor="center", fill="x", expand=True)
+            cards.columnconfigure(0, weight=1)
+            cards.columnconfigure(1, weight=1)
+
+            create_card = ttk.LabelFrame(cards, text="Create Workflow")
+            create_card.grid(row=0, column=0, sticky="nsew", padx=(0, 14), pady=10)
+            ttk.Label(
+                create_card,
+                text=(
+                    "Use the full ExcelOps editor to load files, create filters, "
+                    "build pivots, add VLOOKUP steps, create calculations, and save the workflow."
+                ),
+                wraplength=430,
+                justify="left",
+            ).pack(anchor="w", padx=18, pady=(18, 12))
+            ttk.Button(
+                create_card,
+                text="✨ Create or Edit Workflow",
+                command=self._open_editor_mode,
+                style="Hero.TButton",
+            ).pack(anchor="w", padx=18, pady=(0, 18))
+
+            run_card = ttk.LabelFrame(cards, text="Run Workflow")
+            run_card.grid(row=0, column=1, sticky="nsew", padx=(14, 0), pady=10)
+            ttk.Label(
+                run_card,
+                text=(
+                    "Choose a saved workflow, select the required files, let ExcelOps "
+                    "process everything, then preview and export the final workbook."
+                ),
+                wraplength=430,
+                justify="left",
+            ).pack(anchor="w", padx=18, pady=(18, 12))
+            ttk.Button(
+                run_card,
+                text="▶ Run Saved Workflow",
+                command=self._run_workflow_from_home,
+                style="Hero.TButton",
+            ).pack(anchor="w", padx=18, pady=(0, 18))
+
+            tips = ttk.LabelFrame(hero, text="Simple workflow")
+            tips.pack(fill="x", pady=(24, 0))
+            ttk.Label(
+                tips,
+                text=(
+                    "Create Workflow is for setup. Run Workflow is for day-to-day users. "
+                    "After a workflow runs, open Preview to review the generated sheets before exporting."
+                ),
+                wraplength=980,
+                justify="left",
+            ).pack(anchor="w", padx=16, pady=14)
+
+        self.home_frame.pack(fill="both", expand=True)
+        self.status_var.set("Ready — select Create Workflow or Run Workflow")
+
+    def _open_editor_mode(self):
+        self._show_main_ui()
+        self.status_var.set("Editor mode — build or update your workflow")
+
+    def _run_workflow_from_home(self):
+        self._show_main_ui()
+        self.status_var.set("Workflow runner — select a workflow and required files")
+        self.after(100, self.run_preset_workflow)
+
     def _build_ui(self):
+        self.status_var = tk.StringVar(value="Ready — choose Create Workflow or Run Workflow")
         self._build_menu()
+        self.home_frame = None
+        self.main_widgets = []
 
         top = ttk.Frame(self, style="Toolbar.TFrame")
         top.pack(side="top", fill="x", padx=12, pady=(10, 6), ipady=6)
+        self.toolbar_frame = top
+        self.main_widgets.append(top)
         ttk.Label(top, text="ExcelOps", style="BrandCard.TLabel").pack(side="left", padx=(12, 16))
+        ttk.Button(top, text="📂 Load", command=self.load_file, style="Accent.TButton").pack(side="left", padx=(0, 6))
+        ttk.Button(top, text="👁 Preview", command=self.open_preview_tab).pack(side="left", padx=6)
+        ttk.Button(top, text="💾 Save Workflow", command=lambda: PresetManager.save(self)).pack(side="left", padx=6)
+        ttk.Button(top, text="▶ Run Workflow", command=self.run_preset_workflow, style="Accent.TButton").pack(side="left", padx=6)
+        ttk.Button(top, text="📤 Export", command=self.export_workbook).pack(side="left", padx=(6, 14))
+
         ttk.Label(top, text="File:", style="Card.TLabel").pack(side="left", padx=(10, 0))
         self.dataset_selector = ttk.Combobox(top, state="readonly", width=30, values=[])
         self.dataset_selector.pack(side="left", padx=(6, 12))
@@ -196,7 +319,7 @@ class ExcelOpsApp(tk.Tk):
         self.preview_selector.pack(side="left", padx=6)
         self.preview_selector.bind("<<ComboboxSelected>>", lambda e: self.update_preview())
 
-        ttk.Button(top, text="Delete Selected Rows", command=self.delete_selected_rows).pack(side="left", padx=6)
+        ttk.Button(top, text="🗑 Delete Rows", command=self.delete_selected_rows).pack(side="left", padx=6)
 
         self.show_all_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
@@ -210,6 +333,8 @@ class ExcelOpsApp(tk.Tk):
         # vertical paned window: top preview tree removed (preview is in separate tab now)
         bottom = ttk.Frame(self, style="Card.TFrame")
         bottom.pack(fill="both", expand=True, padx=12, pady=8)
+        self.workspace_frame = bottom
+        self.main_widgets.append(bottom)
 
         # Notebook: sheet tabs (with '+' tab)
         self.nb = ttk.Notebook(bottom)
@@ -224,6 +349,8 @@ class ExcelOpsApp(tk.Tk):
         # Preview Tree (kept hidden; created when preview tab is added)
         self._create_preview_tree_holder()
         self._build_branding_footer()
+        self.main_widgets.append(self.footer_frame)
+        self._show_home_screen()
 
     def _build_menu(self):
         m = tk.Menu(self)
@@ -238,11 +365,15 @@ class ExcelOpsApp(tk.Tk):
         file_m.add_command(label="Export Workbook…", command=self.export_workbook)
 
         presets_m = tk.Menu(m, tearoff=False)
-        m.add_cascade(label="Presets", menu=presets_m)
-        presets_m.add_command(label="Save Preset…", command=lambda: PresetManager.save(self))
-        presets_m.add_command(label="Load Preset…", command=lambda: PresetManager.load(self))
-        presets_m.add_command(label="Run Preset Workflow…", command=self.run_preset_workflow)
-        presets_m.add_command(label="Manage Presets…", command=lambda: PresetManager.manage(self))
+        m.add_cascade(label="Workflows", menu=presets_m)
+        presets_m.add_command(label="Save Workflow…", command=lambda: PresetManager.save(self))
+        presets_m.add_command(label="Open Workflow…", command=lambda: PresetManager.load(self))
+        presets_m.add_command(label="Run Workflow…", command=self.run_preset_workflow)
+        presets_m.add_command(label="Manage Workflows…", command=lambda: PresetManager.manage(self))
+
+        tools_m = tk.Menu(m, tearoff=False)
+        m.add_cascade(label="Tools", menu=tools_m)
+        tools_m.add_command(label="VLOOKUP…", command=self.apply_vlookup)
 
         tools_m = tk.Menu(m, tearoff=False)
         m.add_cascade(label="Tools", menu=tools_m)
@@ -370,6 +501,7 @@ class ExcelOpsApp(tk.Tk):
         self.df = self.datasets[self.active_dataset_name]
         self._reset_workspace_for_dataset()
         self._refresh_dataset_selector()
+        self.status_var.set(f"Loaded {len(self.datasets)} file(s) — ready to build workflow")
 
         loaded_msg = "\n".join(f"• {name}: {len(df)} rows, {len(df.columns)} columns" for name, df in self.datasets.items())
         if errors:
@@ -996,17 +1128,17 @@ class ExcelOpsApp(tk.Tk):
                 df.to_excel(writer, sheet_name=sheet_name, index=False)
 
     def run_preset_workflow(self):
-        preset_name = PresetManager.prompt_select_preset(self)
-        if not preset_name:
+        workflow_name = PresetManager.prompt_select_preset(self)
+        if not workflow_name:
             return
         try:
-            preset_cfg = PresetManager.load_preset_data(preset_name)
+            preset_cfg = PresetManager.load_preset_data(workflow_name)
         except Exception as e:
-            messagebox.showerror("Preset error", str(e))
+            messagebox.showerror("Workflow error", str(e))
             return
 
         main_path = filedialog.askopenfilename(
-            title="Select the main file to process",
+            title=f"Select the main file for workflow: {workflow_name}",
             filetypes=[("Excel/CSV files", "*.xlsx *.xls *.csv"), ("Excel files", "*.xlsx *.xls"), ("CSV files", "*.csv")],
         )
         if not main_path:
@@ -1022,6 +1154,7 @@ class ExcelOpsApp(tk.Tk):
         self._refresh_dataset_selector()
 
         self._apply_preset_config_to_workspace(preset_cfg, run_vlookups=True)
+        self.status_var.set("Workflow processed — choose where to save the workbook")
 
         dest = filedialog.asksaveasfilename(
             title="Save processed workbook",
@@ -1032,9 +1165,11 @@ class ExcelOpsApp(tk.Tk):
             return
         try:
             self._write_workbook(dest)
+            self.open_preview_tab()
+            self.status_var.set("Workflow complete — preview is available and workbook was exported")
             messagebox.showinfo(
                 "Workflow complete",
-                f"Processed preset '{preset_name}' and saved workbook to:\n{dest}",
+                f"Processed workflow '{workflow_name}' and saved workbook to:\n{dest}",
             )
         except Exception as e:
             messagebox.showerror("Workflow export error", str(e))

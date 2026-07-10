@@ -52,7 +52,7 @@ class PresetManager:
         win.transient(parent)
         win.grab_set()
 
-        ttk.Label(win, text="Select a preset:").pack(anchor="w", padx=10, pady=(10, 4))
+        ttk.Label(win, text="Select a workflow:").pack(anchor="w", padx=10, pady=(10, 4))
 
         lb = tk.Listbox(win, exportselection=False)
         lb.pack(fill="both", expand=True, padx=10, pady=(0, 8))
@@ -92,7 +92,7 @@ class PresetManager:
             messagebox.showwarning("No Sheets", "Nothing to save.")
             return
 
-        name = simpledialog.askstring("Save Preset", "Preset name:")
+        name = simpledialog.askstring("Save Workflow", "Workflow name:")
         if not name:
             return
 
@@ -122,7 +122,56 @@ class PresetManager:
         with open(path, "w") as f:
             json.dump(data, f, indent=2)
 
-        messagebox.showinfo("Preset Saved", f"Preset '{name}' saved successfully.")
+        messagebox.showinfo("Workflow Saved", f"Workflow '{name}' saved successfully.")
+
+    @staticmethod
+    def _build_workflow_for_sheet(pivot_cfg: dict, vlookup_cfg: dict, columns_cfg: dict) -> list[dict]:
+        """Save an explicit ordered workflow for each sheet.
+
+        The current UI's supported ordered workflow is:
+        pivot (when generated) -> saved VLOOKUP steps in run order ->
+        calculations/column editing. This makes preset replay deterministic
+        instead of reconstructing order from independent feature configs.
+        """
+        workflow = []
+        if (pivot_cfg or {}).get("generated"):
+            workflow.append({"type": "pivot"})
+
+        runs = list((vlookup_cfg or {}).get("runs", []))
+        if not runs:
+            has_keys = bool(((vlookup_cfg or {}).get("main_keys", "") or "").strip())
+            has_values = bool(((vlookup_cfg or {}).get("values", "") or "").strip())
+            if has_keys and has_values:
+                runs = [vlookup_cfg]
+        for run in runs:
+            workflow.append({"type": "vlookup", "config": dict(run or {})})
+
+        if columns_cfg:
+            workflow.append({"type": "columns"})
+        return workflow
+
+    @staticmethod
+    def _normalize_vlookup_config_for_sheet(sheet, pivot_cfg: dict, vlookup_cfg: dict) -> dict:
+        """Keep saved VLOOKUP steps aligned with the sheet workflow.
+
+        If the current sheet already has a final pivot-result VLOOKUP output, the
+        preset must replay the pivot before VLOOKUP. Older/manual runs can still
+        carry ``input_mode=base`` from before this workflow option existed, so we
+        correct those saved runs at preset-save time.
+        """
+        cfg = dict(vlookup_cfg or {})
+        runs = [dict(run or {}) for run in cfg.get("runs", [])]
+        has_final_pivot_vlookup = sheet.get("final_output_df") is not None and bool(pivot_cfg.get("generated"))
+        if has_final_pivot_vlookup:
+            cfg["input_mode"] = "pivot_result"
+            for run in runs:
+                run["input_mode"] = "pivot_result"
+        else:
+            cfg.setdefault("input_mode", "base")
+            for run in runs:
+                run.setdefault("input_mode", cfg["input_mode"])
+        cfg["runs"] = runs
+        return cfg
 
     @staticmethod
     def _build_workflow_for_sheet(pivot_cfg: dict, vlookup_cfg: dict, columns_cfg: dict) -> list[dict]:
@@ -180,10 +229,10 @@ class PresetManager:
         """
         presets = PresetManager.list_presets()
         if not presets:
-            messagebox.showinfo("No Presets", "No presets available.")
+            messagebox.showinfo("No Workflows", "No saved workflows available.")
             return
 
-        name = PresetManager._choose_preset_name(app, "Load Preset", presets)
+        name = PresetManager._choose_preset_name(app, "Open Workflow", presets)
         if not name:
             return
 
@@ -242,9 +291,9 @@ class PresetManager:
                         runs = [vlookup_cfg]
                 if runs and hasattr(app, "_run_vlookup_for_sheet"):
                     should_run = messagebox.askyesno(
-                        "Run VLOOKUP preset?",
+                        "Run workflow VLOOKUP steps?",
                         (
-                            f"Preset sheet '{s['name']}' contains {len(runs)} saved VLOOKUP step(s).\n\n"
+                            f"Workflow sheet '{s['name']}' contains {len(runs)} saved VLOOKUP step(s).\n\n"
                             "Do you want to select the lookup file(s) and run them now?"
                         ),
                     )
@@ -265,7 +314,7 @@ class PresetManager:
                 pass
 
         app.update_preview()
-        messagebox.showinfo("Preset Loaded", f"Preset '{name}' loaded.")
+        messagebox.showinfo("Workflow Loaded", f"Workflow '{name}' loaded.")
 
     @staticmethod
     def manage(app):
@@ -274,11 +323,11 @@ class PresetManager:
         """
         presets = PresetManager.list_presets()
         if not presets:
-            messagebox.showinfo("No Presets", "No presets available.")
+            messagebox.showinfo("No Workflows", "No saved workflows available.")
             return
 
         win = tk.Toplevel(app)
-        win.title("Manage Presets")
+        win.title("Manage Workflows")
         win.geometry("300x300")
 
         lb = tk.Listbox(win)
@@ -293,7 +342,7 @@ class PresetManager:
                 return
             name = lb.get(sel[0])
             path = PresetManager._preset_path(name)
-            if messagebox.askyesno("Delete", f"Delete preset '{name}'?"):
+            if messagebox.askyesno("Delete", f"Delete workflow '{name}'?"):
                 os.remove(path)
                 lb.delete(sel[0])
 
@@ -307,10 +356,10 @@ class PresetManager:
     def prompt_select_preset(parent):
         presets = PresetManager.list_presets()
         if not presets:
-            messagebox.showerror("No Presets", "No presets available.")
+            messagebox.showerror("No Workflows", "No saved workflows available.")
             return None
 
-        return PresetManager._choose_preset_name(parent, "Select Preset", presets)
+        return PresetManager._choose_preset_name(parent, "Select Workflow", presets)
 
     @staticmethod
     def load_preset_data(name: str) -> dict:

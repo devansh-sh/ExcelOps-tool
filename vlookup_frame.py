@@ -113,7 +113,7 @@ class VlookupFrame(ttk.Frame):
         ttk.Button(actions, text="Save Current VLOOKUP Step", command=self.save_current_step).pack(side="left", padx=4)
         ttk.Button(actions, text="Clear Saved VLOOKUP Steps", command=self.clear_saved_steps).pack(side="left", padx=4)
 
-        saved_box = ttk.LabelFrame(self, text="Saved VLOOKUP Steps Included in Presets")
+        saved_box = ttk.LabelFrame(self, text="Saved VLOOKUP Steps Included in Workflow")
         saved_box.pack(fill="x", padx=6, pady=(0, 6))
         self.runs_lb = tk.Listbox(saved_box, height=3, exportselection=False)
         self.runs_lb.pack(fill="x", padx=6, pady=6)
@@ -224,7 +224,7 @@ class VlookupFrame(ttk.Frame):
             return
         self.runs_lb.delete(0, "end")
         for i, run in enumerate(self.vlookup_runs, start=1):
-            lookup_file = run.get("lookup_file") or "choose file on preset load"
+            lookup_file = run.get("lookup_file") or "choose file when running workflow"
             self.runs_lb.insert(
                 "end",
                 f"{i}. input: {run.get('input_mode', 'base')} | "

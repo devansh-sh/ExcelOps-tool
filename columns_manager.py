@@ -56,7 +56,7 @@ class ColumnsManagerFrame(ttk.Frame):
     # UI
     # ------------------------------------------------------------------
     def _build_ui(self):
-        cols_frame = ttk.LabelFrame(self, text="Edit Columns")
+        cols_frame = ttk.LabelFrame(self, text="Column Editor")
         cols_frame.pack(fill="both", expand=True, padx=6, pady=6)
 
         self.listbox = tk.Listbox(cols_frame, exportselection=False)
@@ -65,12 +65,12 @@ class ColumnsManagerFrame(ttk.Frame):
         btns = ttk.Frame(cols_frame)
         btns.pack(fill="x", pady=4)
 
-        ttk.Button(btns, text="Move Up", command=self._move_up).pack(side="left", padx=4)
-        ttk.Button(btns, text="Move Down", command=self._move_down).pack(side="left", padx=4)
-        ttk.Button(btns, text="Hide Column", command=self._toggle_visibility).pack(side="left", padx=4)
-        ttk.Button(btns, text="Select All", command=self._show_all).pack(side="left", padx=4)
-        ttk.Button(btns, text="Unselect All", command=self._hide_all).pack(side="left", padx=4)
-        ttk.Button(btns, text="Apply Changes", command=self._apply).pack(side="right", padx=4)
+        ttk.Button(btns, text="↑ Move Up", command=self._move_up).pack(side="left", padx=4)
+        ttk.Button(btns, text="↓ Move Down", command=self._move_down).pack(side="left", padx=4)
+        ttk.Button(btns, text="👁 Show/Hide", command=self._toggle_visibility).pack(side="left", padx=4)
+        ttk.Button(btns, text="✓ Select All", command=self._show_all).pack(side="left", padx=4)
+        ttk.Button(btns, text="○ Unselect All", command=self._hide_all).pack(side="left", padx=4)
+        ttk.Button(btns, text="Apply Changes", command=self._apply, style="Accent.TButton").pack(side="right", padx=4)
 
         dup = ttk.LabelFrame(self, text="Remove Duplicate Rows")
         dup.pack(fill="x", padx=6, pady=(0, 6))
@@ -99,7 +99,7 @@ class ColumnsManagerFrame(ttk.Frame):
             foreground="#4b5563",
         ).pack(anchor="w", padx=4, pady=(0, 4))
 
-        calc = ttk.LabelFrame(self, text="Calculated Columns")
+        calc = ttk.LabelFrame(self, text="Calculated Columns / Formula Builder")
         calc.pack(fill="both", padx=6, pady=(0, 6))
 
         ttk.Label(
