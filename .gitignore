@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+*.pyc
+
+# Generated data / local artifacts
+*.xlsx
+*.xls
+*.xlsm
+*.docx
+*.csv
+watch_folder/
