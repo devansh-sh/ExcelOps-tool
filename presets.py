@@ -174,6 +174,55 @@ class PresetManager:
         return cfg
 
     @staticmethod
+    def _build_workflow_for_sheet(pivot_cfg: dict, vlookup_cfg: dict, columns_cfg: dict) -> list[dict]:
+        """Save an explicit ordered workflow for each sheet.
+
+        The current UI's supported ordered workflow is:
+        pivot (when generated) -> saved VLOOKUP steps in run order ->
+        calculations/column editing. This makes preset replay deterministic
+        instead of reconstructing order from independent feature configs.
+        """
+        workflow = []
+        if (pivot_cfg or {}).get("generated"):
+            workflow.append({"type": "pivot"})
+
+        runs = list((vlookup_cfg or {}).get("runs", []))
+        if not runs:
+            has_keys = bool(((vlookup_cfg or {}).get("main_keys", "") or "").strip())
+            has_values = bool(((vlookup_cfg or {}).get("values", "") or "").strip())
+            if has_keys and has_values:
+                runs = [vlookup_cfg]
+        for run in runs:
+            workflow.append({"type": "vlookup", "config": dict(run or {})})
+
+        if columns_cfg:
+            workflow.append({"type": "columns"})
+        return workflow
+
+    @staticmethod
+    def _normalize_vlookup_config_for_sheet(sheet, pivot_cfg: dict, vlookup_cfg: dict) -> dict:
+        """Keep saved VLOOKUP steps aligned with the sheet workflow.
+
+        If the current sheet already has a final pivot-result VLOOKUP output, the
+        preset must replay the pivot before VLOOKUP. Older/manual runs can still
+        carry ``input_mode=base`` from before this workflow option existed, so we
+        correct those saved runs at preset-save time.
+        """
+        cfg = dict(vlookup_cfg or {})
+        runs = [dict(run or {}) for run in cfg.get("runs", [])]
+        has_final_pivot_vlookup = sheet.get("final_output_df") is not None and bool(pivot_cfg.get("generated"))
+        if has_final_pivot_vlookup:
+            cfg["input_mode"] = "pivot_result"
+            for run in runs:
+                run["input_mode"] = "pivot_result"
+        else:
+            cfg.setdefault("input_mode", "base")
+            for run in runs:
+                run.setdefault("input_mode", cfg["input_mode"])
+        cfg["runs"] = runs
+        return cfg
+
+    @staticmethod
     def load(app):
         """
         Load preset into UI (creates sheets)
