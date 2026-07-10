@@ -375,10 +375,6 @@ class ExcelOpsApp(tk.Tk):
         m.add_cascade(label="Tools", menu=tools_m)
         tools_m.add_command(label="VLOOKUP…", command=self.apply_vlookup)
 
-        tools_m = tk.Menu(m, tearoff=False)
-        m.add_cascade(label="Tools", menu=tools_m)
-        tools_m.add_command(label="VLOOKUP…", command=self.apply_vlookup)
-
         edit_m = tk.Menu(m, tearoff=False)
         m.add_cascade(label="Edit", menu=edit_m)
         edit_m.add_command(label="Add Sheet", command=lambda: self.add_sheet(self._next_sheet_name()))
