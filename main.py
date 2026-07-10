@@ -202,10 +202,17 @@ class ExcelOpsApp(tk.Tk):
                 widget.pack_forget()
             except Exception:
                 pass
+        if getattr(self, "preview_only_frame", None) is not None:
+            try:
+                self.preview_only_frame.pack_forget()
+            except Exception:
+                pass
 
     def _show_main_ui(self):
         if getattr(self, "home_frame", None) is not None:
             self.home_frame.pack_forget()
+        if getattr(self, "preview_only_frame", None) is not None:
+            self.preview_only_frame.pack_forget()
         self.toolbar_frame.pack(side="top", fill="x", padx=12, pady=(10, 6), ipady=6)
         self.workspace_frame.pack(fill="both", expand=True, padx=12, pady=8)
         self.footer_frame.pack(side="bottom", fill="x", padx=14, pady=(0, 10))
@@ -288,9 +295,65 @@ class ExcelOpsApp(tk.Tk):
         self.status_var.set("Editor mode — build or update your workflow")
 
     def _run_workflow_from_home(self):
-        self._show_main_ui()
         self.status_var.set("Workflow runner — select a workflow and required files")
-        self.after(100, self.run_preset_workflow)
+        self.after(100, lambda: self.run_preset_workflow(runner_mode=True))
+
+    def _restore_home_after_runner_cancel(self):
+        self.deiconify()
+        self._show_home_screen()
+
+    def _show_preview_only_screen(self):
+        self.deiconify()
+        self._hide_main_ui()
+        if getattr(self, "home_frame", None) is not None:
+            self.home_frame.pack_forget()
+
+        if getattr(self, "preview_only_frame", None) is None:
+            self.preview_only_frame = ttk.Frame(self, style="Footer.TFrame")
+
+            header = ttk.Frame(self.preview_only_frame, style="Footer.TFrame")
+            header.pack(fill="x", padx=24, pady=(18, 10))
+            ttk.Label(header, text="Workflow Results", style="Hero.TLabel").pack(side="left")
+            ttk.Button(header, text="🏠 Back Home", command=self._show_home_screen).pack(side="right", padx=6)
+            ttk.Button(header, text="📤 Export Workbook", command=self.export_workbook, style="Accent.TButton").pack(side="right", padx=6)
+
+            control = ttk.Frame(self.preview_only_frame, style="Footer.TFrame")
+            control.pack(fill="x", padx=24, pady=(0, 10))
+            ttk.Label(control, text="Preview output sheet:", style="Subtitle.TLabel").pack(side="left")
+            self.runner_preview_selector = ttk.Combobox(control, state="readonly", width=42)
+            self.runner_preview_selector.pack(side="left", padx=(8, 0))
+            self.runner_preview_selector.bind("<<ComboboxSelected>>", lambda _event: self._update_runner_preview())
+
+            tree_holder = ttk.Frame(self.preview_only_frame)
+            tree_holder.pack(fill="both", expand=True, padx=24, pady=(0, 18))
+            self.runner_preview_tree = ttk.Treeview(tree_holder, show="headings")
+            self.runner_preview_tree.pack(side="left", fill="both", expand=True)
+            vs = ttk.Scrollbar(tree_holder, orient="vertical", command=self.runner_preview_tree.yview)
+            hs = ttk.Scrollbar(tree_holder, orient="horizontal", command=self.runner_preview_tree.xview)
+            self.runner_preview_tree.configure(yscrollcommand=vs.set, xscrollcommand=hs.set)
+            vs.pack(side="right", fill="y")
+            hs.pack(side="bottom", fill="x")
+
+        self.preview_only_frame.pack(fill="both", expand=True)
+        self._refresh_runner_preview_selector()
+        self.status_var.set("Workflow complete — previewing generated output")
+
+    def _refresh_runner_preview_selector(self):
+        if not hasattr(self, "runner_preview_selector"):
+            return
+        items = [s["name"] for s in self.sheets] or ["Raw Data"]
+        self.runner_preview_selector["values"] = items
+        cur = self.runner_preview_selector.get()
+        self.runner_preview_selector.set(cur if cur in items else items[0])
+        self._update_runner_preview()
+
+    def _update_runner_preview(self):
+        if not hasattr(self, "runner_preview_tree"):
+            return
+        target = self.runner_preview_selector.get()
+        sheet = next((s for s in self.sheets if s["name"] == target), None)
+        df = self._generate_filtered_df(sheet) if sheet else self.df
+        self._render_df_into_tree(df, self.runner_preview_tree)
 
     def _build_ui(self):
         self.status_var = tk.StringVar(value="Ready — choose Create Workflow or Run Workflow")
@@ -1123,14 +1186,24 @@ class ExcelOpsApp(tk.Tk):
                 sheet_name = self._safe_excel_sheet_name(sheet["name"], used)
                 df.to_excel(writer, sheet_name=sheet_name, index=False)
 
-    def run_preset_workflow(self):
+    def run_preset_workflow(self, runner_mode: bool = False):
+        if runner_mode:
+            # Keep the full ExcelOps editor out of sight while the user selects
+            # the workflow, main file, lookup files, and export location.
+            self.withdraw()
         workflow_name = PresetManager.prompt_select_preset(self)
         if not workflow_name:
+            if runner_mode:
+                self._restore_home_after_runner_cancel()
             return
         try:
             preset_cfg = PresetManager.load_preset_data(workflow_name)
         except Exception as e:
+            if runner_mode:
+                self.deiconify()
             messagebox.showerror("Workflow error", str(e))
+            if runner_mode:
+                self._restore_home_after_runner_cancel()
             return
 
         main_path = filedialog.askopenfilename(
@@ -1138,11 +1211,17 @@ class ExcelOpsApp(tk.Tk):
             filetypes=[("Excel/CSV files", "*.xlsx *.xls *.csv"), ("Excel files", "*.xlsx *.xls"), ("CSV files", "*.csv")],
         )
         if not main_path:
+            if runner_mode:
+                self._restore_home_after_runner_cancel()
             return
         try:
             self.df = self._read_data_file(main_path).reset_index(drop=True)
         except Exception as e:
+            if runner_mode:
+                self.deiconify()
             messagebox.showerror("Load error", f"Could not load main file:\n{e}")
+            if runner_mode:
+                self._restore_home_after_runner_cancel()
             return
 
         self.datasets = {os.path.basename(main_path): self.df}
@@ -1158,17 +1237,26 @@ class ExcelOpsApp(tk.Tk):
             filetypes=[("Excel files", "*.xlsx")],
         )
         if not dest:
+            if runner_mode:
+                self._restore_home_after_runner_cancel()
             return
         try:
             self._write_workbook(dest)
-            self.open_preview_tab()
-            self.status_var.set("Workflow complete — preview is available and workbook was exported")
-            messagebox.showinfo(
-                "Workflow complete",
-                f"Processed workflow '{workflow_name}' and saved workbook to:\n{dest}",
-            )
+            if runner_mode:
+                self._show_preview_only_screen()
+            else:
+                self.open_preview_tab()
+                self.status_var.set("Workflow complete — preview is available and workbook was exported")
+                messagebox.showinfo(
+                    "Workflow complete",
+                    f"Processed workflow '{workflow_name}' and saved workbook to:\n{dest}",
+                )
         except Exception as e:
+            if runner_mode:
+                self.deiconify()
             messagebox.showerror("Workflow export error", str(e))
+            if runner_mode:
+                self._restore_home_after_runner_cancel()
 
     # ---------------- Preview tab handling ----------------
     def open_preview_tab(self):
