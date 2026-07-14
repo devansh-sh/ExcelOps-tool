@@ -1188,9 +1188,12 @@ class ExcelOpsApp(tk.Tk):
 
     def run_preset_workflow(self, runner_mode: bool = False):
         if runner_mode:
-            # Keep the full ExcelOps editor out of sight while the user selects
-            # the workflow, main file, lookup files, and export location.
-            self.withdraw()
+            # Keep the editor hidden, but do not withdraw the Tk root. The
+            # workflow picker is a child Toplevel, and withdrawing the root can
+            # hide that popup on macOS.
+            self._hide_main_ui()
+            self.deiconify()
+            self.lift()
         workflow_name = PresetManager.prompt_select_preset(self)
         if not workflow_name:
             if runner_mode:
