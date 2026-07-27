@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-labelledby="title desc">
+  <title id="title">ExcelOps by BDS</title>
+  <desc id="desc">A green analytics mark with rising bars and the ExcelOps wordmark.</desc>
+  <rect width="640" height="220" rx="36" fill="#ffffff"/>
+  <g transform="translate(34 28)">
+    <rect x="18" y="94" width="38" height="54" rx="5" fill="#76b86f"/>
+    <rect x="76" y="62" width="38" height="86" rx="5" fill="#55a64f"/>
+    <rect x="134" y="22" width="38" height="126" rx="5" fill="#2f7d32"/>
+    <path d="M30 80 C48 44 78 34 92 46 C72 58 52 73 30 80Z" fill="#16351f"/>
+    <path d="M96 49 C111 18 144 8 158 20 C137 31 118 44 96 49Z" fill="#16351f"/>
+    <path d="M44 158 H174" stroke="#10233f" stroke-width="8" stroke-linecap="round"/>
+    <text x="96" y="184" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#16351f">BDS</text>
+  </g>
+  <g transform="translate(244 55)">
+    <text x="0" y="64" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="700" fill="#10233f">Excel<tspan fill="#2f7d32">Ops</tspan></text>
+    <text x="4" y="105" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="600" letter-spacing="4" fill="#66758a">WORKFLOW AUTOMATION</text>
+  </g>
+</svg>

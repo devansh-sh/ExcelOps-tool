@@ -1,11 +1,32 @@
 # presets.py
 import os
 import json
+import shutil
+import sys
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import pandas as pd
 
-PRESET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "presets")
+APP_NAME = "ExcelOps"
+
+
+def _user_preset_dir() -> str:
+    """Return a writable workflow directory in source and packaged modes."""
+    override = os.environ.get("EXCELOPS_PRESET_DIR")
+    if override:
+        return os.path.abspath(os.path.expanduser(override))
+    if not getattr(sys, "frozen", False):
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), "presets")
+    if sys.platform == "darwin":
+        base = os.path.expanduser("~/Library/Application Support")
+    elif os.name == "nt":
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+    else:
+        base = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+    return os.path.join(base, APP_NAME, "workflows")
+
+
+PRESET_DIR = _user_preset_dir()
 
 
 class PresetManager:
@@ -22,10 +43,22 @@ class PresetManager:
     @staticmethod
     def _ensure_dir():
         os.makedirs(PRESET_DIR, exist_ok=True)
+        if getattr(sys, "frozen", False):
+            bundled = os.path.join(getattr(sys, "_MEIPASS", ""), "presets")
+            if os.path.isdir(bundled):
+                for filename in os.listdir(bundled):
+                    if not filename.endswith(".json"):
+                        continue
+                    target = os.path.join(PRESET_DIR, filename)
+                    if not os.path.exists(target):
+                        shutil.copy2(os.path.join(bundled, filename), target)
 
     @staticmethod
     def _preset_path(name: str) -> str:
-        return os.path.join(PRESET_DIR, f"{name}.json")
+        safe_name = str(name).strip().replace("/", "_").replace("\\", "_")
+        if not safe_name or safe_name in {".", ".."}:
+            raise ValueError("Workflow name cannot be empty.")
+        return os.path.join(PRESET_DIR, f"{safe_name}.json")
 
     @staticmethod
     def list_presets():
@@ -39,7 +72,7 @@ class PresetManager:
         path = PresetManager._preset_path(name)
         if not os.path.exists(path):
             raise FileNotFoundError(f"Preset not found: {name}")
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
 
     # ---------- UI actions ----------
@@ -48,18 +81,38 @@ class PresetManager:
     def _choose_preset_name(parent, title: str, presets: list[str]) -> str | None:
         win = tk.Toplevel(parent)
         win.title(title)
-        win.geometry("360x360")
+        win.geometry("500x500")
+        win.minsize(420, 380)
         win.transient(parent)
         win.grab_set()
 
-        ttk.Label(win, text="Select a workflow:").pack(anchor="w", padx=10, pady=(10, 4))
+        heading = ttk.Frame(win)
+        heading.pack(fill="x", padx=18, pady=(18, 10))
+        ttk.Label(heading, text="Select a workflow", style="Brand.TLabel").pack(anchor="w")
+        ttk.Label(
+            heading,
+            text="Choose a saved process, then ExcelOps will ask for the files it needs.",
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(4, 0))
+
+        search_var = tk.StringVar()
+        search = ttk.Entry(win, textvariable=search_var)
+        search.pack(fill="x", padx=18, pady=(0, 10), ipady=5)
 
         lb = tk.Listbox(win, exportselection=False)
-        lb.pack(fill="both", expand=True, padx=10, pady=(0, 8))
-        for name in presets:
-            lb.insert("end", name)
-        if presets:
-            lb.selection_set(0)
+        lb.pack(fill="both", expand=True, padx=18, pady=(0, 12))
+
+        def refresh_list(*_args):
+            query = search_var.get().strip().casefold()
+            matches = [name for name in presets if query in name.casefold()]
+            lb.delete(0, "end")
+            for workflow_name in matches:
+                lb.insert("end", workflow_name)
+            if matches:
+                lb.selection_set(0)
+
+        search_var.trace_add("write", refresh_list)
+        refresh_list()
 
         selected = {"value": None}
 
@@ -73,12 +126,19 @@ class PresetManager:
         def on_cancel():
             win.destroy()
 
+        def focus_list(_event=None):
+            lb.focus_set()
+            return "break"
+
         btns = ttk.Frame(win)
-        btns.pack(fill="x", padx=10, pady=(0, 10))
+        btns.pack(fill="x", padx=18, pady=(0, 18))
         ttk.Button(btns, text="Cancel", command=on_cancel).pack(side="right", padx=4)
-        ttk.Button(btns, text="Load", command=on_ok).pack(side="right", padx=4)
+        ttk.Button(btns, text="Continue", command=on_ok, style="Accent.TButton").pack(side="right", padx=4)
 
         lb.bind("<Double-1>", lambda e: on_ok())
+        lb.bind("<Return>", lambda e: on_ok())
+        search.bind("<Down>", focus_list)
+        search.focus_set()
         win.wait_window()
         return selected["value"]
 
@@ -119,7 +179,7 @@ class PresetManager:
             }
             data["sheets"].append(sheet_cfg)
 
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
         messagebox.showinfo("Workflow Saved", f"Workflow '{name}' saved successfully.")

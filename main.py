@@ -31,7 +31,8 @@ class ExcelOpsApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("ExcelOps")
-        self.geometry("1280x820")
+        self.geometry("1380x860")
+        self.minsize(1080, 700)
         self.configure(bg="#f4f6f8")
 
         self.df: pd.DataFrame | None = None
@@ -49,6 +50,7 @@ class ExcelOpsApp(tk.Tk):
         self.preview_tab_id = None  # stores preview tab id if open
 
         self._apply_modern_theme()
+        self._set_window_branding()
         self._build_ui()
 
     def _apply_modern_theme(self):
@@ -57,11 +59,15 @@ class ExcelOpsApp(tk.Tk):
             style.theme_use("clam")
         except Exception:
             pass
-        self.ui_bg = "#eef2f7"
+        self.ui_bg = "#f4f7fb"
         self.card_bg = "#ffffff"
-        self.accent = "#6b7f2a"
-        self.accent_dark = "#26311f"
-        self.muted = "#64748b"
+        self.accent = "#2f7d32"
+        self.accent_hover = "#256528"
+        self.accent_soft = "#eaf5e9"
+        self.accent_dark = "#16351f"
+        self.navy = "#10233f"
+        self.muted = "#66758a"
+        self.border = "#dce4ee"
         self.configure(bg=self.ui_bg)
 
         style.configure("TFrame", background=self.ui_bg)
@@ -72,17 +78,19 @@ class ExcelOpsApp(tk.Tk):
         style.configure(
             "TLabelframe.Label",
             background=self.card_bg,
-            foreground="#1f2937",
+            foreground=self.navy,
             font=("Arial", 10, "bold"),
         )
-        style.configure("TLabel", background=self.ui_bg, foreground="#111827", font=("Arial", 10))
-        style.configure("Card.TLabel", background=self.card_bg, foreground="#111827", font=("Arial", 10))
+        style.configure("TLabel", background=self.ui_bg, foreground=self.navy, font=("Arial", 10))
+        style.configure("Card.TLabel", background=self.card_bg, foreground=self.navy, font=("Arial", 10))
         style.configure("Muted.TLabel", background=self.ui_bg, foreground=self.muted, font=("Arial", 9))
+        style.configure("CardMuted.TLabel", background=self.card_bg, foreground=self.muted, font=("Arial", 9))
+        style.configure("Eyebrow.TLabel", background=self.ui_bg, foreground=self.accent, font=("Arial", 9, "bold"))
         style.configure(
             "Hero.TLabel",
             background=self.ui_bg,
             foreground=self.accent_dark,
-            font=("Arial", 28, "bold"),
+            font=("Arial", 32, "bold"),
         )
         style.configure(
             "Subtitle.TLabel",
@@ -102,10 +110,29 @@ class ExcelOpsApp(tk.Tk):
             foreground=self.accent_dark,
             font=("Arial", 15, "bold"),
         )
-        style.configure("TButton", padding=(12, 7), font=("Arial", 10), borderwidth=0)
-        style.map("TButton", background=[("active", "#dbe7c2")])
-        style.configure("Accent.TButton", padding=(16, 9), font=("Arial", 10, "bold"))
-        style.configure("Hero.TButton", padding=(24, 16), font=("Arial", 13, "bold"))
+        style.configure("TButton", padding=(12, 8), font=("Arial", 10), borderwidth=0)
+        style.map("TButton", background=[("active", self.accent_soft)])
+        style.configure(
+            "Accent.TButton",
+            padding=(16, 10),
+            font=("Arial", 10, "bold"),
+            foreground="#ffffff",
+            background=self.accent,
+        )
+        style.map(
+            "Accent.TButton",
+            foreground=[("disabled", "#d9e4d9"), ("!disabled", "#ffffff")],
+            background=[("active", self.accent_hover), ("pressed", self.accent_dark)],
+        )
+        style.configure(
+            "Hero.TButton",
+            padding=(24, 16),
+            font=("Arial", 13, "bold"),
+            foreground="#ffffff",
+            background=self.accent,
+        )
+        style.map("Hero.TButton", background=[("active", self.accent_hover), ("pressed", self.accent_dark)])
+        style.configure("Outline.TButton", padding=(16, 10), font=("Arial", 10, "bold"))
         style.configure("Quiet.TButton", padding=(12, 7), font=("Arial", 10))
         style.configure("TCheckbutton", background=self.ui_bg, foreground="#111827")
         style.configure("Card.TCheckbutton", background=self.card_bg, foreground="#111827")
@@ -114,7 +141,7 @@ class ExcelOpsApp(tk.Tk):
         style.configure("TNotebook.Tab", padding=(14, 8), font=("Arial", 10, "bold"))
         style.map(
             "TNotebook.Tab",
-            background=[("selected", self.card_bg), ("active", "#e6eddb")],
+            background=[("selected", self.card_bg), ("active", self.accent_soft)],
             foreground=[("selected", self.accent_dark), ("active", self.accent_dark)],
         )
         style.configure(
@@ -127,9 +154,21 @@ class ExcelOpsApp(tk.Tk):
         style.configure(
             "Treeview.Heading",
             font=("Arial", 10, "bold"),
-            background="#e8eed9",
+            background=self.accent_soft,
             foreground=self.accent_dark,
         )
+        style.map("Treeview", background=[("selected", "#dcefdc")], foreground=[("selected", self.navy)])
+
+    def _set_window_branding(self):
+        """Create a crisp, dependency-free app icon for Tk and packaged builds."""
+        icon = tk.PhotoImage(width=64, height=64)
+        icon.put(self.navy, to=(0, 0, 64, 64))
+        icon.put(self.accent, to=(10, 40, 22, 54))
+        icon.put("#6fbd68", to=(26, 27, 38, 54))
+        icon.put("#a6d79f", to=(42, 12, 54, 54))
+        icon.put("#ffffff", to=(10, 57, 54, 60))
+        self.app_icon = icon
+        self.iconphoto(True, self.app_icon)
 
     def _build_branding_footer(self, parent=None):
         parent = parent or self
@@ -146,9 +185,14 @@ class ExcelOpsApp(tk.Tk):
         right = ttk.Frame(footer, style="Footer.TFrame")
         right.pack(side="right", anchor="e")
 
-        logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "excelops_logo.png")
+        root_dir = os.path.dirname(os.path.abspath(__file__))
+        logo_candidates = (
+            os.path.join(root_dir, "assets", "excelops_logo.png"),
+            os.path.join(root_dir, "excelops_logo.png"),
+        )
+        logo_path = next((path for path in logo_candidates if os.path.exists(path)), "")
         self.logo_image = None
-        if os.path.exists(logo_path):
+        if logo_path:
             try:
                 self.logo_image = tk.PhotoImage(file=logo_path)
                 ttk.Label(right, image=self.logo_image).pack(side="right", padx=(6, 0))
@@ -156,7 +200,7 @@ class ExcelOpsApp(tk.Tk):
                 self.logo_image = None
 
         if self.logo_image is None:
-            self._draw_footer_logo(right).pack(side="right", padx=(10, 0))
+            self._draw_brand_mark(right, compact=True).pack(side="right", padx=(10, 0))
 
         text_wrap = ttk.Frame(right, style="Footer.TFrame")
         text_wrap.pack(side="right", anchor="e")
@@ -167,21 +211,29 @@ class ExcelOpsApp(tk.Tk):
             style="Muted.TLabel",
         ).pack(anchor="e")
 
-    def _draw_footer_logo(self, parent):
+    def _draw_brand_mark(self, parent, compact=False, background=None):
+        """Render the BDS/ExcelOps brand mark without an external image file."""
+        scale = 0.76 if compact else 1.25
+        width = int(82 * scale)
+        height = int(58 * scale)
+        background = background or self.ui_bg
         logo = tk.Canvas(
             parent,
-            width=82,
-            height=54,
-            bg=self.ui_bg,
+            width=width,
+            height=height,
+            bg=background,
             highlightthickness=0,
             bd=0,
         )
 
-        bar_color = "#b7c56b"
+        def s(value):
+            return int(value * scale)
+
+        bar_color = "#76b86f"
         leaf_color = self.accent_dark
-        logo.create_rectangle(8, 31, 20, 44, fill=bar_color, outline=bar_color)
-        logo.create_rectangle(28, 21, 40, 44, fill=bar_color, outline=bar_color)
-        logo.create_rectangle(48, 9, 60, 44, fill=bar_color, outline=bar_color)
+        logo.create_rectangle(s(8), s(31), s(20), s(44), fill=bar_color, outline=bar_color)
+        logo.create_rectangle(s(28), s(21), s(40), s(44), fill=bar_color, outline=bar_color)
+        logo.create_rectangle(s(48), s(9), s(60), s(44), fill=bar_color, outline=bar_color)
 
         leaf_shapes = [
             (54, 2, 48, 17, 54, 24, 60, 17),
@@ -191,9 +243,9 @@ class ExcelOpsApp(tk.Tk):
             (68, 22, 56, 27, 68, 32, 80, 27),
         ]
         for points in leaf_shapes:
-            logo.create_polygon(points, fill=leaf_color, outline=leaf_color, smooth=True)
+            logo.create_polygon(tuple(s(p) for p in points), fill=leaf_color, outline=leaf_color, smooth=True)
 
-        logo.create_text(42, 50, text="BDS", fill=leaf_color, font=("Arial", 13, "bold"))
+        logo.create_text(s(42), s(51), text="BDS", fill=leaf_color, font=("Arial", max(8, s(11)), "bold"))
         return logo
 
     def _hide_main_ui(self):
@@ -213,8 +265,8 @@ class ExcelOpsApp(tk.Tk):
             self.home_frame.pack_forget()
         if getattr(self, "preview_only_frame", None) is not None:
             self.preview_only_frame.pack_forget()
-        self.toolbar_frame.pack(side="top", fill="x", padx=12, pady=(10, 6), ipady=6)
-        self.workspace_frame.pack(fill="both", expand=True, padx=12, pady=8)
+        self.toolbar_frame.pack(side="top", fill="x", padx=14, pady=(12, 6))
+        self.workspace_frame.pack(fill="both", expand=True, padx=14, pady=(6, 8))
         self.footer_frame.pack(side="bottom", fill="x", padx=14, pady=(0, 10))
 
     def _show_home_screen(self):
@@ -227,7 +279,9 @@ class ExcelOpsApp(tk.Tk):
 
             header = ttk.Frame(hero, style="Footer.TFrame")
             header.pack(fill="x", pady=(10, 28))
-            ttk.Label(header, text="ExcelOps", style="Hero.TLabel").pack(anchor="center")
+            self._draw_brand_mark(header, background=self.ui_bg).pack(anchor="center", pady=(0, 8))
+            ttk.Label(header, text="WORKFLOW AUTOMATION", style="Eyebrow.TLabel").pack(anchor="center")
+            ttk.Label(header, text="ExcelOps", style="Hero.TLabel").pack(anchor="center", pady=(4, 0))
             ttk.Label(
                 header,
                 text="Build powerful spreadsheet workflows once. Run them in a few clicks.",
@@ -241,6 +295,12 @@ class ExcelOpsApp(tk.Tk):
 
             create_card = ttk.LabelFrame(cards, text="Create Workflow")
             create_card.grid(row=0, column=0, sticky="nsew", padx=(0, 14), pady=10)
+            ttk.Label(create_card, text="DESIGN & AUTOMATE", style="CardMuted.TLabel").pack(
+                anchor="w", padx=18, pady=(18, 2)
+            )
+            ttk.Label(create_card, text="Build a reusable process", style="BrandCard.TLabel").pack(
+                anchor="w", padx=18, pady=(0, 8)
+            )
             ttk.Label(
                 create_card,
                 text=(
@@ -249,7 +309,7 @@ class ExcelOpsApp(tk.Tk):
                 ),
                 wraplength=430,
                 justify="left",
-            ).pack(anchor="w", padx=18, pady=(18, 12))
+            ).pack(anchor="w", padx=18, pady=(0, 14))
             ttk.Button(
                 create_card,
                 text="✨ Create or Edit Workflow",
@@ -259,6 +319,12 @@ class ExcelOpsApp(tk.Tk):
 
             run_card = ttk.LabelFrame(cards, text="Run Workflow")
             run_card.grid(row=0, column=1, sticky="nsew", padx=(14, 0), pady=10)
+            ttk.Label(run_card, text="FAST & GUIDED", style="CardMuted.TLabel").pack(
+                anchor="w", padx=18, pady=(18, 2)
+            )
+            ttk.Label(run_card, text="Process files confidently", style="BrandCard.TLabel").pack(
+                anchor="w", padx=18, pady=(0, 8)
+            )
             ttk.Label(
                 run_card,
                 text=(
@@ -267,7 +333,7 @@ class ExcelOpsApp(tk.Tk):
                 ),
                 wraplength=430,
                 justify="left",
-            ).pack(anchor="w", padx=18, pady=(18, 12))
+            ).pack(anchor="w", padx=18, pady=(0, 14))
             ttk.Button(
                 run_card,
                 text="▶ Run Saved Workflow",
@@ -275,17 +341,17 @@ class ExcelOpsApp(tk.Tk):
                 style="Hero.TButton",
             ).pack(anchor="w", padx=18, pady=(0, 18))
 
-            tips = ttk.LabelFrame(hero, text="Simple workflow")
+            tips = ttk.LabelFrame(hero, text="How ExcelOps works")
             tips.pack(fill="x", pady=(24, 0))
             ttk.Label(
                 tips,
                 text=(
-                    "Create Workflow is for setup. Run Workflow is for day-to-day users. "
-                    "After a workflow runs, open Preview to review the generated sheets before exporting."
+                    "1  Choose a saved workflow     →     2  Select the requested files     →     "
+                    "3  Review the preview     →     4  Export the finished workbook"
                 ),
                 wraplength=980,
-                justify="left",
-            ).pack(anchor="w", padx=16, pady=14)
+                justify="center",
+            ).pack(anchor="center", padx=16, pady=16)
 
         self.home_frame.pack(fill="both", expand=True)
         self.status_var.set("Ready — select Create Workflow or Run Workflow")
@@ -313,7 +379,15 @@ class ExcelOpsApp(tk.Tk):
 
             header = ttk.Frame(self.preview_only_frame, style="Footer.TFrame")
             header.pack(fill="x", padx=24, pady=(18, 10))
-            ttk.Label(header, text="Workflow Results", style="Hero.TLabel").pack(side="left")
+            self._draw_brand_mark(header, compact=True, background=self.ui_bg).pack(side="left", padx=(0, 10))
+            title_wrap = ttk.Frame(header, style="Footer.TFrame")
+            title_wrap.pack(side="left")
+            ttk.Label(title_wrap, text="Workflow Results", style="Hero.TLabel").pack(anchor="w")
+            ttk.Label(
+                title_wrap,
+                text="Your processed workbook is ready to review.",
+                style="Subtitle.TLabel",
+            ).pack(anchor="w")
             ttk.Button(header, text="🏠 Back Home", command=self._show_home_screen).pack(side="right", padx=6)
             ttk.Button(header, text="📤 Export Workbook", command=self.export_workbook, style="Accent.TButton").pack(side="right", padx=6)
 
@@ -323,6 +397,8 @@ class ExcelOpsApp(tk.Tk):
             self.runner_preview_selector = ttk.Combobox(control, state="readonly", width=42)
             self.runner_preview_selector.pack(side="left", padx=(8, 0))
             self.runner_preview_selector.bind("<<ComboboxSelected>>", lambda _event: self._update_runner_preview())
+            self.runner_preview_stats = tk.StringVar(value="")
+            ttk.Label(control, textvariable=self.runner_preview_stats, style="Muted.TLabel").pack(side="right")
 
             tree_holder = ttk.Frame(self.preview_only_frame)
             tree_holder.pack(fill="both", expand=True, padx=24, pady=(0, 18))
@@ -353,6 +429,8 @@ class ExcelOpsApp(tk.Tk):
         target = self.runner_preview_selector.get()
         sheet = next((s for s in self.sheets if s["name"] == target), None)
         df = self._generate_filtered_df(sheet) if sheet else self.df
+        if df is not None and hasattr(self, "runner_preview_stats"):
+            self.runner_preview_stats.set(f"{len(df):,} rows  •  {len(df.columns):,} columns")
         self._render_df_into_tree(df, self.runner_preview_tree)
 
     def _build_ui(self):
@@ -362,40 +440,50 @@ class ExcelOpsApp(tk.Tk):
         self.main_widgets = []
 
         top = ttk.Frame(self, style="Toolbar.TFrame")
-        top.pack(side="top", fill="x", padx=12, pady=(10, 6), ipady=6)
+        top.pack(side="top", fill="x", padx=14, pady=(12, 6))
         self.toolbar_frame = top
         self.main_widgets.append(top)
-        ttk.Label(top, text="ExcelOps", style="BrandCard.TLabel").pack(side="left", padx=(12, 16))
-        ttk.Button(top, text="📂 Load", command=self.load_file, style="Accent.TButton").pack(side="left", padx=(0, 6))
-        ttk.Button(top, text="👁 Preview", command=self.open_preview_tab).pack(side="left", padx=6)
-        ttk.Button(top, text="💾 Save Workflow", command=lambda: PresetManager.save(self)).pack(side="left", padx=6)
-        ttk.Button(top, text="▶ Run Workflow", command=self.run_preset_workflow, style="Accent.TButton").pack(side="left", padx=6)
-        ttk.Button(top, text="📤 Export", command=self.export_workbook).pack(side="left", padx=(6, 14))
+        action_row = ttk.Frame(top, style="Toolbar.TFrame")
+        action_row.pack(fill="x", padx=14, pady=(10, 6))
+        self._draw_brand_mark(action_row, compact=True, background=self.card_bg).pack(side="left", padx=(0, 8))
+        brand = ttk.Frame(action_row, style="Toolbar.TFrame")
+        brand.pack(side="left", padx=(0, 22))
+        ttk.Label(brand, text="ExcelOps", style="BrandCard.TLabel").pack(anchor="w")
+        ttk.Label(brand, text="Workflow Studio", style="CardMuted.TLabel").pack(anchor="w")
 
-        ttk.Label(top, text="File:", style="Card.TLabel").pack(side="left", padx=(10, 0))
-        self.dataset_selector = ttk.Combobox(top, state="readonly", width=30, values=[])
-        self.dataset_selector.pack(side="left", padx=(6, 12))
+        ttk.Button(action_row, text="Load Data", command=self.load_file, style="Accent.TButton").pack(side="left", padx=(0, 6))
+        ttk.Button(action_row, text="Preview", command=self.open_preview_tab).pack(side="left", padx=6)
+        ttk.Button(action_row, text="Save Workflow", command=lambda: PresetManager.save(self)).pack(side="left", padx=6)
+        ttk.Button(action_row, text="Run Workflow", command=self.run_preset_workflow, style="Accent.TButton").pack(side="left", padx=6)
+        ttk.Button(action_row, text="Export Workbook", command=self.export_workbook).pack(side="left", padx=6)
+        ttk.Button(action_row, text="Home", command=self._show_home_screen, style="Outline.TButton").pack(side="right")
+
+        context_row = ttk.Frame(top, style="Toolbar.TFrame")
+        context_row.pack(fill="x", padx=14, pady=(2, 10))
+        ttk.Label(context_row, text="ACTIVE FILE", style="CardMuted.TLabel").pack(side="left")
+        self.dataset_selector = ttk.Combobox(context_row, state="readonly", width=32, values=[])
+        self.dataset_selector.pack(side="left", padx=(8, 20))
         self.dataset_selector.bind("<<ComboboxSelected>>", self._on_dataset_selected)
 
-        ttk.Label(top, text="Preview:", style="Card.TLabel").pack(side="left")
-        self.preview_selector = ttk.Combobox(top, state="readonly", width=40, values=[])
-        self.preview_selector.pack(side="left", padx=6)
+        ttk.Label(context_row, text="PREVIEW", style="CardMuted.TLabel").pack(side="left")
+        self.preview_selector = ttk.Combobox(context_row, state="readonly", width=34, values=[])
+        self.preview_selector.pack(side="left", padx=(8, 14))
         self.preview_selector.bind("<<ComboboxSelected>>", lambda e: self.update_preview())
 
-        ttk.Button(top, text="🗑 Delete Rows", command=self.delete_selected_rows).pack(side="left", padx=6)
+        ttk.Button(context_row, text="Delete Selected Rows", command=self.delete_selected_rows).pack(side="left", padx=6)
 
         self.show_all_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
-            top,
+            context_row,
             text="Show full",
             variable=self.show_all_var,
             command=self.update_preview,
             style="Card.TCheckbutton",
-        ).pack(side="right", padx=(0, 10))
+        ).pack(side="right", padx=(0, 2))
 
         # vertical paned window: top preview tree removed (preview is in separate tab now)
         bottom = ttk.Frame(self, style="Card.TFrame")
-        bottom.pack(fill="both", expand=True, padx=12, pady=8)
+        bottom.pack(fill="both", expand=True, padx=14, pady=(6, 8))
         self.workspace_frame = bottom
         self.main_widgets.append(bottom)
 
