@@ -125,10 +125,14 @@ class FiltersFrame(ttk.Frame):
         }
         self.rows.append(row)
 
-        col_cb.bind("<<ComboboxSelected>>", lambda e, r=row: self._populate_values(r))
+        col_cb.bind("<<ComboboxSelected>>", lambda e, r=row: self._on_column_changed(r))
         op_cb.bind("<<ComboboxSelected>>", lambda e, r=row: self._op_changed(r))
         val_cb.bind("<<ComboboxSelected>>", lambda e: self._changed())
+        val_cb.bind("<KeyRelease>", lambda e: self._changed())
         cmp_cb.bind("<<ComboboxSelected>>", lambda e: self._changed())
+
+        for var in (join, col, op, val, cmp_col):
+            var.trace_add("write", lambda *_: self._changed())
 
         if preset:
             join.set(preset.get("join", ""))
@@ -147,7 +151,22 @@ class FiltersFrame(ttk.Frame):
                 self.rows[i] = None
                 break
         self.rows = [r for r in self.rows if r]
+        self._reflow_rows()
         self._changed()
+
+    def _reflow_rows(self):
+        for idx, row in enumerate(self.rows):
+            row["frame"].grid_configure(row=idx + 1)
+            join_cb = row["frame"].grid_slaves(row=0, column=0)
+            if not join_cb:
+                continue
+            if idx == 0:
+                row["join"].set("")
+                join_cb[0].configure(state="disabled")
+            else:
+                if row["join"].get() not in ("AND", "OR"):
+                    row["join"].set("AND")
+                join_cb[0].configure(state="readonly")
 
     # ---------------- UI Logic ----------------
     def _op_changed(self, row):
@@ -166,6 +185,10 @@ class FiltersFrame(ttk.Frame):
         if col in self.df.columns:
             vals = self.df[col].dropna().astype(str).unique().tolist()[:300]
             row["val_cb"]["values"] = ["Column Average"] + vals
+
+    def _on_column_changed(self, row):
+        self._populate_values(row)
+        self._changed()
 
     # ---------------- Apply ----------------
     def apply_filters(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -202,15 +225,33 @@ class FiltersFrame(ttk.Frame):
                 except Exception:
                     m = OPS[op](s.astype(str), str(val))
 
+            if not isinstance(m, pd.Series):
+                continue
+
             masks.append(m.fillna(False))
             joins.append(r["join"].get())
 
         if not masks:
             return df
 
-        final = masks[0]
-        for i in range(1, len(masks)):
-            final = final | masks[i] if joins[i] == "OR" else final & masks[i]
+        groups = []
+        current = None
+        for i, m in enumerate(masks):
+            join = joins[i] if i < len(joins) else ""
+            if current is None:
+                current = m
+                continue
+            if join == "OR":
+                groups.append(current)
+                current = m
+            else:
+                current = current & m
+        if current is not None:
+            groups.append(current)
+
+        final = groups[0]
+        for g in groups[1:]:
+            final = final | g
 
         return df[final]
 
@@ -232,7 +273,16 @@ class FiltersFrame(ttk.Frame):
     def load_config(self, cfg: Dict[str, Any]):
         self.reset(silent=True)
         for f in cfg.get("filters", []):
-            self.add_row(f)
+            if isinstance(f, dict):
+                self.add_row(f)
+            elif isinstance(f, (list, tuple)) and len(f) >= 4:
+                self.add_row({
+                    "join": f[0],
+                    "col": f[1],
+                    "op": f[2],
+                    "val": f[3],
+                    "cmp": f[4] if len(f) > 4 else "",
+                })
         self._changed()
 
     # ---------------- Misc ----------------

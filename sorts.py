@@ -2,6 +2,59 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
 
+
+_MONTH_PATTERN = (
+    r"\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|"
+    r"jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|"
+    r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b"
+)
+
+
+def _looks_like_date_series(s: pd.Series) -> bool:
+    sample = s.dropna().astype(str).str.replace("\u00a0", " ", regex=False).str.strip()
+    if sample.empty:
+        return False
+    sample = sample.head(100)
+    date_like = sample.str.contains(r"[/-]", regex=True) | sample.str.contains(
+        _MONTH_PATTERN,
+        case=False,
+        regex=True,
+    )
+    return bool(date_like.mean() >= 0.6)
+
+
+def _parse_dates_for_sort(text: pd.Series) -> pd.Series:
+    try:
+        parsed = pd.to_datetime(text, errors="coerce", dayfirst=True, format="mixed")
+    except TypeError:
+        parsed = pd.to_datetime(text, errors="coerce", dayfirst=True)
+
+    # Month-name dates such as "Monday, January 4, 1999" parse more reliably with month-first rules.
+    if parsed.notna().mean() < 0.6 and text.str.contains(_MONTH_PATTERN, case=False, regex=True).mean() >= 0.6:
+        try:
+            parsed = pd.to_datetime(text, errors="coerce", dayfirst=False, format="mixed")
+        except TypeError:
+            parsed = pd.to_datetime(text, errors="coerce", dayfirst=False)
+    return parsed
+
+
+def _coerce_sort_key(s: pd.Series) -> pd.Series:
+    """Return a sort-friendly key so dates/numbers don't sort as plain text."""
+    if pd.api.types.is_datetime64_any_dtype(s):
+        return s
+
+    text = s.astype(str).str.replace("\u00a0", " ", regex=False).str.strip()
+    if _looks_like_date_series(s):
+        parsed_dates = _parse_dates_for_sort(text)
+        if parsed_dates.notna().mean() >= 0.6:
+            return parsed_dates
+
+    numeric = pd.to_numeric(text.str.replace(",", "", regex=False), errors="coerce")
+    if numeric.notna().mean() >= 0.8:
+        return numeric
+
+    return text.str.casefold()
+
 class SortsFrame(ttk.Frame):
     """
     Multi-level sort with per-row Join (AND/OR).
@@ -208,10 +261,16 @@ class SortsFrame(ttk.Frame):
             cols = [c for c,_ in group]
             asc = [a for _,a in group]
             try:
-                out = out.sort_values(by=cols, ascending=asc, na_position="last", kind="mergesort")
+                out = out.sort_values(
+                    by=cols,
+                    ascending=asc,
+                    na_position="last",
+                    kind="mergesort",
+                    key=_coerce_sort_key,
+                )
             except Exception:
                 # fallback: ignore kind param
-                out = out.sort_values(by=cols, ascending=asc, na_position="last")
+                out = out.sort_values(by=cols, ascending=asc, na_position="last", key=_coerce_sort_key)
         return out
 
     # ---------- config ----------
