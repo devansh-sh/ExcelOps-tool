@@ -2,6 +2,18 @@
 
 ExcelOps is a desktop workflow builder and runner for repeatable spreadsheet analysis. It supports CSV/Excel input, filters, sorting, calculated columns, pivot tables, chained VLOOKUP steps, previews, and multi-sheet workbook export.
 
+## Calculated-column formulas
+
+Calculated columns accept direct, row-by-row formulas using column names:
+
+```text
+IF(A21 > B32, A21 * B3, 0)
+IF(AND(Revenue >= 2500000, SellQty = 0), Revenue, 0)
+IF(OR(Status = "Open", Priority = "High"), "Review", "Skip")
+```
+
+The leading Excel `=` is optional. Formula references are **column headers**, evaluated row by row; `A21` therefore means a column whose header is `A21`, not spreadsheet cell A21. Use backticks around column names containing spaces, for example `` `Sell Qty` ``. Column matching is case-insensitive, so `b3` can match `B3`. `IF` may omit its third argument, in which case unmatched rows are blank. Formula definitions remain part of the saved workflow.
+
 ## Run from source
 
 ```bash

@@ -2,6 +2,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
+import re
 from typing import Optional, Dict, Any, List
 
 
@@ -16,6 +17,14 @@ CALC_FUNCTIONS = [
     "MIN",
     "MAX",
     "COALESCE",
+    "IF",
+    "AND",
+    "OR",
+]
+
+BUILDER_FUNCTIONS = [
+    "ADD", "SUBTRACT", "MULTIPLY", "DIVIDE", "PERCENT",
+    "ABS", "ROUND", "MIN", "MAX", "COALESCE",
 ]
 
 
@@ -44,7 +53,7 @@ class ColumnsManagerFrame(ttk.Frame):
         self.formula_expr_var = tk.StringVar()
         self.formula_column_picker_var = tk.StringVar()
 
-        self.calc_fn_var = tk.StringVar(value=CALC_FUNCTIONS[0])
+        self.calc_fn_var = tk.StringVar(value=BUILDER_FUNCTIONS[0])
         self.calc_col1_var = tk.StringVar()
         self.calc_col2_var = tk.StringVar()
         self.calc_constant_var = tk.StringVar()
@@ -106,9 +115,21 @@ class ColumnsManagerFrame(ttk.Frame):
             calc,
             text=(
                 "Supported functions: ADD, SUBTRACT, MULTIPLY, DIVIDE, PERCENT, "
-                "ABS, ROUND, MIN, MAX, COALESCE"
+                "ABS, ROUND, MIN, MAX, COALESCE, IF, AND, OR"
             ),
         ).pack(anchor="w", padx=4, pady=(4, 2))
+
+        ttk.Label(
+            calc,
+            text=(
+                "Type formulas directly using column names. Examples: "
+                "IF(A21 > B32, A21 * B3, 0)  •  "
+                "IF(AND(Revenue >= 2500000, SellQty == 0), Revenue, 0)"
+            ),
+            foreground="#4b5563",
+            wraplength=1050,
+            justify="left",
+        ).pack(anchor="w", padx=4, pady=(0, 4))
 
         form_row = ttk.Frame(calc)
         form_row.pack(fill="x", padx=4, pady=2)
@@ -136,7 +157,13 @@ class ColumnsManagerFrame(ttk.Frame):
         row1 = ttk.Frame(builder)
         row1.pack(fill="x", padx=4, pady=2)
         ttk.Label(row1, text="Function").pack(side="left")
-        self.fn_cb = ttk.Combobox(row1, textvariable=self.calc_fn_var, values=CALC_FUNCTIONS, state="readonly", width=14)
+        self.fn_cb = ttk.Combobox(
+            row1,
+            textvariable=self.calc_fn_var,
+            values=BUILDER_FUNCTIONS,
+            state="readonly",
+            width=14,
+        )
         self.fn_cb.pack(side="left", padx=(6, 12))
         ttk.Label(row1, text="Column 1").pack(side="left")
         self.calc_col1_cb = ttk.Combobox(row1, textvariable=self.calc_col1_var, state="readonly", width=22)
@@ -156,6 +183,7 @@ class ColumnsManagerFrame(ttk.Frame):
         calc_btns = ttk.Frame(calc)
         calc_btns.pack(fill="x", padx=4, pady=2)
         ttk.Button(calc_btns, text="Add / Update Formula", command=self._upsert_formula).pack(side="left", padx=4)
+        ttk.Button(calc_btns, text="Validate Formula", command=self._validate_current_formula).pack(side="left", padx=4)
         ttk.Button(calc_btns, text="Delete Formula", command=self._delete_formula).pack(side="left", padx=4)
 
         self.formula_list = tk.Listbox(calc, height=5, exportselection=False)
@@ -211,16 +239,161 @@ class ColumnsManagerFrame(ttk.Frame):
             return df[raw]
         return pd.to_numeric(pd.Series([raw] * len(df)), errors="coerce")
 
+    @staticmethod
+    def _split_formula_args(text: str) -> List[str]:
+        """Split function arguments while preserving nested calls and strings."""
+        args, current = [], []
+        depth = 0
+        quote = None
+        for char in text:
+            if quote:
+                current.append(char)
+                if char == quote:
+                    quote = None
+                continue
+            if char in {"'", '"'}:
+                quote = char
+                current.append(char)
+            elif char == "(":
+                depth += 1
+                current.append(char)
+            elif char == ")":
+                depth -= 1
+                if depth < 0:
+                    raise ValueError("Formula contains an unmatched closing parenthesis.")
+                current.append(char)
+            elif char == "," and depth == 0:
+                args.append("".join(current).strip())
+                current = []
+            else:
+                current.append(char)
+        if quote:
+            raise ValueError("Formula contains an unterminated quoted value.")
+        if depth != 0:
+            raise ValueError("Formula contains unmatched parentheses.")
+        args.append("".join(current).strip())
+        return args
+
+    @staticmethod
+    def _outer_function(expr: str):
+        match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*\(", expr)
+        if not match or not expr.endswith(")"):
+            return None, None
+        start = match.end() - 1
+        depth = 0
+        quote = None
+        for index in range(start, len(expr)):
+            char = expr[index]
+            if quote:
+                if char == quote:
+                    quote = None
+                continue
+            if char in {"'", '"'}:
+                quote = char
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0 and index != len(expr) - 1:
+                    return None, None
+        if depth != 0 or quote:
+            raise ValueError("Formula contains unmatched parentheses or quotes.")
+        return match.group(1).upper(), expr[start + 1:-1]
+
+    @staticmethod
+    def _normalise_excel_expression(expr: str) -> str:
+        expr = expr.replace("<>", "!=")
+        expr = re.sub(r"(?<![<>=!])=(?!=)", "==", expr)
+        expr = re.sub(r"\bAND\b", "and", expr, flags=re.IGNORECASE)
+        expr = re.sub(r"\bOR\b", "or", expr, flags=re.IGNORECASE)
+        return expr
+
+    @staticmethod
+    def _normalise_formula_columns(df: pd.DataFrame, expr: str) -> str:
+        """Resolve typed column names case-insensitively without changing strings."""
+        column_map = {str(column).casefold(): str(column) for column in df.columns}
+
+        def replace_segment(segment: str) -> str:
+            def replace_identifier(match):
+                typed = match.group(0)
+                actual = column_map.get(typed.casefold())
+                return f"`{actual}`" if actual is not None else typed
+
+            return re.sub(r"\b[A-Za-z_][A-Za-z0-9_]*\b", replace_identifier, segment)
+
+        protected_parts = re.split(r'(`[^`]+`|"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')', expr)
+        normalised_parts = []
+        for part in protected_parts:
+            if part.startswith("`") and part.endswith("`"):
+                typed = part[1:-1]
+                normalised_parts.append(f"`{column_map.get(typed.casefold(), typed)}`")
+            elif part[:1] in {"'", '"'}:
+                normalised_parts.append(part)
+            else:
+                normalised_parts.append(replace_segment(part))
+        return "".join(normalised_parts)
+
+    @staticmethod
+    def _as_series(df: pd.DataFrame, value):
+        if isinstance(value, pd.Series):
+            return value.reindex(df.index)
+        return pd.Series([value] * len(df), index=df.index)
+
+    def _evaluate_basic_expression(self, df: pd.DataFrame, expr: str):
+        raw = expr.strip()
+        if not raw:
+            raise ValueError("Formula expression cannot be empty.")
+        if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {"'", '"'}:
+            return raw[1:-1]
+        if raw.upper() == "TRUE":
+            return True
+        if raw.upper() == "FALSE":
+            return False
+        try:
+            return float(raw) if "." in raw else int(raw)
+        except ValueError:
+            pass
+        if raw.startswith("`") and raw.endswith("`") and raw[1:-1] in df.columns:
+            return df[raw[1:-1]]
+        if raw in df.columns:
+            return df[raw]
+        normalised = self._normalise_excel_expression(raw)
+        normalised = self._normalise_formula_columns(df, normalised)
+        return df.eval(normalised, engine="python")
+
+    def _as_boolean_series(self, df: pd.DataFrame, value):
+        series = self._as_series(df, value)
+        if not pd.api.types.is_bool_dtype(series):
+            series = series.fillna(False).astype(bool)
+        return series.fillna(False)
+
     def _evaluate_formula_expr(self, df: pd.DataFrame, expr: str):
         expr = expr.strip()
-        if "(" not in expr or not expr.endswith(")"):
-            return df.eval(expr, engine="python")
+        if expr.startswith("="):
+            expr = expr[1:].strip()
+        natural_if = re.match(r"^IF\s+(.+)$", expr, flags=re.IGNORECASE)
+        if natural_if and not re.match(r"^IF\s*\(", expr, flags=re.IGNORECASE):
+            expr = f"IF({natural_if.group(1)})"
+        fn, args_raw = self._outer_function(expr)
+        if fn is None or fn not in CALC_FUNCTIONS:
+            return self._evaluate_basic_expression(df, expr)
+        args = self._split_formula_args(args_raw)
 
-        fn = expr.split("(", 1)[0].strip().upper()
-        args_raw = expr.split("(", 1)[1][:-1]
-        args = [a.strip() for a in args_raw.split(",") if a.strip()]
-        if fn not in CALC_FUNCTIONS:
-            return df.eval(expr, engine="python")
+        if fn == "IF":
+            if len(args) not in (2, 3):
+                raise ValueError("IF requires IF(condition, value_if_true, value_if_false). The false value is optional.")
+            condition = self._as_boolean_series(df, self._evaluate_formula_expr(df, args[0]))
+            true_value = self._as_series(df, self._evaluate_formula_expr(df, args[1]))
+            false_value = self._evaluate_formula_expr(df, args[2]) if len(args) == 3 else pd.NA
+            return true_value.where(condition, false_value)
+        if fn in {"AND", "OR"}:
+            if len(args) < 2:
+                raise ValueError(f"{fn} requires at least two conditions.")
+            result = self._as_boolean_series(df, self._evaluate_formula_expr(df, args[0]))
+            for arg in args[1:]:
+                condition = self._as_boolean_series(df, self._evaluate_formula_expr(df, arg))
+                result = result & condition if fn == "AND" else result | condition
+            return result
 
         if fn == "ADD" and len(args) == 2:
             return self._series_or_number(df, args[0]) + self._series_or_number(df, args[1])
@@ -257,7 +430,7 @@ class ColumnsManagerFrame(ttk.Frame):
             b = self._series_or_number(df, args[1])
             return a.fillna(b)
 
-        return df.eval(expr, engine="python")
+        raise ValueError(f"Invalid arguments for {fn}.")
 
     # ------------------------------------------------------------------
     # Column actions
@@ -348,11 +521,52 @@ class ColumnsManagerFrame(ttk.Frame):
             return
         self.formula_expr_var.set(formula)
 
+    def _formula_validation_df(self, formula_name: str) -> pd.DataFrame | None:
+        if self.df is None or self.df.empty:
+            return None
+        sample = self.df.head(100).copy()
+        for formula in self.formulas:
+            name = formula.get("name", "").strip()
+            expr = formula.get("expr", "").strip()
+            if not name or not expr or name == formula_name:
+                continue
+            sample[name] = self._evaluate_formula_expr(sample, expr)
+        return sample
+
+    def _validate_current_formula(self, show_success: bool = True) -> bool:
+        name = self.formula_name_var.get().strip()
+        expr = self.formula_expr_var.get().strip()
+        if not name or not expr:
+            messagebox.showwarning("Formula", "Both Column Name and Formula are required.")
+            return False
+        sample = self._formula_validation_df(name)
+        if sample is None:
+            messagebox.showwarning("Formula", "Load data before validating a calculated column.")
+            return False
+        try:
+            result = self._evaluate_formula_expr(sample, expr)
+            result = self._as_series(sample, result)
+            if len(result) != len(sample):
+                raise ValueError("Formula result does not match the number of input rows.")
+        except Exception as exc:
+            messagebox.showerror(
+                "Invalid Formula",
+                f"ExcelOps could not evaluate this formula:\n\n{exc}\n\n"
+                "Use column names (backticks for names with spaces) and functions such as "
+                "IF, AND, and OR.",
+            )
+            return False
+        if show_success:
+            messagebox.showinfo("Formula Valid", "The formula is valid and ready to save in this workflow.")
+        return True
+
     def _upsert_formula(self):
         name = self.formula_name_var.get().strip()
         expr = self.formula_expr_var.get().strip()
         if not name or not expr:
             messagebox.showwarning("Formula", "Both Column Name and Formula are required.")
+            return
+        if not self._validate_current_formula(show_success=False):
             return
 
         idx = next((i for i, f in enumerate(self.formulas) if f.get("name") == name), None)
